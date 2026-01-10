@@ -146,8 +146,8 @@ def build_static():
 
 @app.command()
 def serve(
-    host: str = typer.Option("0.0.0.0", "--host", "-h", help="서버 호스트"),
-    port: int = typer.Option(8000, "--port", "-p", help="서버 포트"),
+    host: str = typer.Option("0.0.0.0", help="서버 호스트"),
+    port: int = typer.Option(8000, help="서버 포트"),
     reload: bool = typer.Option(False, "--reload/--no-reload", help="자동 리로드"),
 ):
     """웹 대시보드 서버 실행"""
@@ -164,7 +164,7 @@ def serve(
 
 @app.command()
 def schedule(
-    interval: int = typer.Option(60, "--interval", "-i", help="크롤링 간격 (분)"),
+    interval: int = typer.Option(60, help="크롤링 간격 (분)"),
 ):
     """스케줄러와 함께 웹 서버 실행"""
     console.print(f"[bold blue]스케줄러 모드로 시작합니다...[/]")
@@ -226,8 +226,8 @@ def stats():
 
 @app.command()
 def list_jobs(
-    limit: int = typer.Option(20, "--limit", "-l", help="출력할 공고 수"),
-    source: Optional[str] = typer.Option(None, "--source", "-s", help="필터할 소스"),
+    limit: int = typer.Option(20, help="출력할 공고 수"),
+    source: Optional[str] = typer.Option(None, help="필터할 소스"),
 ):
     """수집된 채용 공고 목록 출력"""
     db = Database()
