@@ -2,9 +2,9 @@
 
 > 데이터 분석 관련 채용 공고를 자동으로 수집하고 GitHub Pages에서 확인할 수 있는 에이전트
 
-## 데모
+## 대시보드
 
-🔗 **대시보드**: `https://[your-username].github.io/Recruitment_Auto/`
+🔗 **https://1916571-alt.github.io/Recruitment_Auto/**
 
 ## 특징
 
@@ -53,7 +53,7 @@
 
 ### 4. 대시보드 확인
 
-`https://[your-username].github.io/Recruitment_Auto/`
+https://1916571-alt.github.io/Recruitment_Auto/
 
 ---
 
