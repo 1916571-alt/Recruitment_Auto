@@ -18,6 +18,7 @@
 | 사이트 | 상태 |
 |--------|------|
 | 사람인 | ✅ |
+| 인디스워크 | ✅ |
 
 > **주의**: 개인 학습/정보 수집 목적으로만 사용하세요
 
@@ -87,7 +88,7 @@ Recruitment_Auto/
 │   └── workflows/
 │       └── crawl.yml         # GitHub Actions 워크플로우
 ├── src/
-│   ├── crawlers/             # 사람인 크롤러
+│   ├── crawlers/             # 사람인, 인디스워크 크롤러
 │   ├── models/               # 데이터 모델
 │   ├── storage/              # SQLite (로컬용)
 │   ├── exporter.py           # JSON 내보내기
