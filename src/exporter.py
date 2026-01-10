@@ -33,16 +33,33 @@ class JSONExporter:
             except:
                 pass
 
-        # 새 데이터 병합
+        # 새 데이터 병합 (first_seen_at 기반 is_new 판별)
+        now = datetime.now()
+        new_threshold_hours = 48  # 48시간 이내 발견된 공고를 "새 공고"로 표시
         new_count = 0
+
         for job in jobs:
             job_dict = self._job_to_dict(job)
             if job.id not in existing_jobs:
+                # 처음 발견된 공고: first_seen_at 기록
+                job_dict["first_seen_at"] = now.isoformat()
                 job_dict["is_new"] = True
                 new_count += 1
             else:
-                # 기존 공고는 is_new를 False로
-                job_dict["is_new"] = False
+                # 기존 공고: first_seen_at 유지, is_new는 시간 기반으로 판별
+                existing_job = existing_jobs[job.id]
+                job_dict["first_seen_at"] = existing_job.get("first_seen_at", now.isoformat())
+
+                # first_seen_at으로부터 48시간 이내면 여전히 "새 공고"
+                try:
+                    first_seen = datetime.fromisoformat(job_dict["first_seen_at"])
+                    hours_since_first_seen = (now - first_seen).total_seconds() / 3600
+                    job_dict["is_new"] = hours_since_first_seen <= new_threshold_hours
+                    if job_dict["is_new"]:
+                        new_count += 1
+                except:
+                    job_dict["is_new"] = False
+
             existing_jobs[job.id] = job_dict
 
         # 마감된 공고 필터링
