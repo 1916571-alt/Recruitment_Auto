@@ -64,42 +64,15 @@
             </div>
         </div>
 
-        <!-- 직군별 통계 -->
-        <div id="category-stats" class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-            <div onclick="filterByCategory('all')" class="cursor-pointer bg-white rounded-xl shadow-sm p-4 border-2 border-purple-500 hover:shadow-md transition category-stat-card" data-category="all">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-sm font-medium text-gray-700">전체</span>
-                    <span id="cat-all-new" class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">+0 새 공고</span>
-                </div>
-                <div id="cat-all-total" class="text-2xl font-bold text-purple-600">0</div>
-            </div>
-            <div onclick="filterByCategory('data')" class="cursor-pointer bg-white rounded-xl shadow-sm p-4 border border-gray-100 hover:border-purple-300 hover:shadow-md transition category-stat-card" data-category="data">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-sm font-medium text-gray-700">데이터</span>
-                    <span id="cat-data-new" class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">+0</span>
-                </div>
-                <div id="cat-data-total" class="text-2xl font-bold text-blue-600">0</div>
-            </div>
-            <div onclick="filterByCategory('backend')" class="cursor-pointer bg-white rounded-xl shadow-sm p-4 border border-gray-100 hover:border-purple-300 hover:shadow-md transition category-stat-card" data-category="backend">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-sm font-medium text-gray-700">백엔드</span>
-                    <span id="cat-backend-new" class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">+0</span>
-                </div>
-                <div id="cat-backend-total" class="text-2xl font-bold text-blue-600">0</div>
-            </div>
-            <div onclick="filterByCategory('frontend')" class="cursor-pointer bg-white rounded-xl shadow-sm p-4 border border-gray-100 hover:border-purple-300 hover:shadow-md transition category-stat-card" data-category="frontend">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-sm font-medium text-gray-700">프론트엔드</span>
-                    <span id="cat-frontend-new" class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">+0</span>
-                </div>
-                <div id="cat-frontend-total" class="text-2xl font-bold text-blue-600">0</div>
-            </div>
-            <div onclick="filterByCategory('pm')" class="cursor-pointer bg-white rounded-xl shadow-sm p-4 border border-gray-100 hover:border-purple-300 hover:shadow-md transition category-stat-card" data-category="pm">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-sm font-medium text-gray-700">PM/기획</span>
-                    <span id="cat-pm-new" class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">+0</span>
-                </div>
-                <div id="cat-pm-total" class="text-2xl font-bold text-blue-600">0</div>
+        <!-- 직군 필터 -->
+        <div class="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-100">
+            <div class="text-xs text-gray-500 mb-2 font-medium">직군</div>
+            <div class="flex flex-wrap gap-2" id="category-filters">
+                <button onclick="filterByCategory('all')" class="category-btn category-active px-4 py-2 rounded-full text-sm font-medium transition" data-category="all">전체</button>
+                <button onclick="filterByCategory('data')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition" data-category="data">데이터</button>
+                <button onclick="filterByCategory('backend')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition" data-category="backend">백엔드</button>
+                <button onclick="filterByCategory('frontend')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition" data-category="frontend">프론트엔드</button>
+                <button onclick="filterByCategory('pm')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition" data-category="pm">PM/기획</button>
             </div>
         </div>
 
@@ -161,8 +134,7 @@
                 const data = await response.json();
 
                 allJobs = data.jobs || [];
-                updateStats(data.stats);
-                updateCategoryStats();
+                updateStats();
                 updateTime(data.updated_at);
                 applyFilters();
             } catch (error) {
@@ -176,45 +148,38 @@
             }
         }
 
-        function updateStats(stats) {
-            if (!stats) return;
-            document.getElementById('stat-total').textContent = stats.total || 0;
-            document.getElementById('stat-new').textContent = stats.new || 0;
-            document.getElementById('stat-expiring').textContent = stats.expiring_7days || 0;
-            const sourceCount = Object.values(stats.by_source || {}).filter(c => c > 0).length;
-            document.getElementById('stat-sources').textContent = sourceCount;
-        }
+        function updateStats() {
+            // 현재 선택된 직군 기준으로 통계 계산
+            let filtered = [...allJobs];
 
-        function updateCategoryStats() {
-            // 전체 통계
-            const allTotal = allJobs.length;
-            const allNew = allJobs.filter(j => j.is_new).length;
-            document.getElementById('cat-all-total').textContent = allTotal;
-            document.getElementById('cat-all-new').textContent = allNew > 0 ? `+${allNew} 새 공고` : '새 공고 없음';
-
-            // 직군별 통계
-            ['data', 'backend', 'frontend', 'pm'].forEach(cat => {
-                const keywords = categoryKeywords[cat] || [];
-                const filtered = allJobs.filter(job => {
+            if (currentCategory !== 'all') {
+                const keywords = categoryKeywords[currentCategory] || [];
+                filtered = filtered.filter(job => {
                     const text = (job.title + ' ' + (job.description || '')).toLowerCase();
                     return keywords.some(kw => text.includes(kw.toLowerCase()));
                 });
-                const total = filtered.length;
-                const newCount = filtered.filter(j => j.is_new).length;
+            }
 
-                document.getElementById(`cat-${cat}-total`).textContent = total;
-                document.getElementById(`cat-${cat}-new`).textContent = newCount > 0 ? `+${newCount}` : '-';
+            const total = filtered.length;
+            const newCount = filtered.filter(j => j.is_new).length;
 
-                // 새 공고가 있으면 배지 강조
-                const badge = document.getElementById(`cat-${cat}-new`);
-                if (newCount > 0) {
-                    badge.classList.remove('bg-gray-100', 'text-gray-500');
-                    badge.classList.add('bg-green-100', 'text-green-700');
-                } else {
-                    badge.classList.remove('bg-green-100', 'text-green-700');
-                    badge.classList.add('bg-gray-100', 'text-gray-500');
-                }
-            });
+            // 7일 내 마감 계산
+            const now = new Date();
+            const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+            const expiringCount = filtered.filter(job => {
+                if (!job.deadline) return false;
+                const deadline = new Date(job.deadline);
+                return deadline >= now && deadline <= weekLater;
+            }).length;
+
+            // 수집 사이트 수 (해당 직군에서 사용된 소스만)
+            const sources = new Set(filtered.map(j => j.source));
+            const sourceCount = sources.size;
+
+            document.getElementById('stat-total').textContent = total;
+            document.getElementById('stat-new').textContent = newCount;
+            document.getElementById('stat-expiring').textContent = expiringCount;
+            document.getElementById('stat-sources').textContent = sourceCount;
         }
 
         function updateTime(isoString) {
@@ -226,16 +191,18 @@
 
         function filterByCategory(category) {
             currentCategory = category;
-            // 카드 스타일 업데이트
-            document.querySelectorAll('.category-stat-card').forEach(card => {
-                card.classList.remove('border-2', 'border-purple-500');
-                card.classList.add('border', 'border-gray-100');
+            // 버튼 스타일 업데이트
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.classList.remove('category-active');
+                btn.classList.add('bg-gray-100', 'text-gray-700');
             });
-            const activeCard = document.querySelector(`.category-stat-card[data-category="${category}"]`);
-            if (activeCard) {
-                activeCard.classList.remove('border', 'border-gray-100');
-                activeCard.classList.add('border-2', 'border-purple-500');
+            const activeBtn = document.querySelector(`.category-btn[data-category="${category}"]`);
+            if (activeBtn) {
+                activeBtn.classList.add('category-active');
+                activeBtn.classList.remove('bg-gray-100', 'text-gray-700');
             }
+            // 상단 통계 업데이트
+            updateStats();
             applyFilters();
         }
 
