@@ -16,7 +16,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from src.crawlers import SaraminCrawler, InthisworkCrawler, GoogleSearchCrawler
 from src.storage import Database
-from src.exporter import JSONExporter, StaticSiteBuilder
+from src.exporter import JSONExporter
+from src.exporters.static_site_builder import StaticSiteBuilder
 from src.core.config import get_config
 from src.models import JobPosting
 from config import settings
