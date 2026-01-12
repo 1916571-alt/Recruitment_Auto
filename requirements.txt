@@ -34,7 +34,8 @@ click>=8.0.0,<8.2.0
 rich==13.7.0
 
 # Embedding
-sentence-transformers==2.2.2
+sentence-transformers>=2.6.0
+huggingface_hub>=0.21.0
 numpy>=1.24.0
 
 # Testing
