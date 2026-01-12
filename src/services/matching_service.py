@@ -3,6 +3,7 @@
 
 단일 책임: 프로필과 채용 공고의 매칭 점수 계산
 """
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -41,16 +42,19 @@ CATEGORY_KEYWORDS: Dict[JobCategory, List[str]] = {
 
 
 class ProfileMatcher(MatcherProtocol):
-    """프로필 매칭 서비스"""
+    """프로필 매칭 서비스
 
-    # 점수 가중치
-    CATEGORY_WEIGHT = 30
-    EXPERIENCE_WEIGHT = 20
-    LOCATION_WEIGHT = 10
-    EMBEDDING_WEIGHT = 40
+    2-Stage 매칭:
+    1단계: 경력 조건 필터 (통과 못하면 제외)
+    2단계: 직무 카테고리 + 스킬/설명 유사도 점수
+    """
+
+    # 점수 가중치 (2단계)
+    CATEGORY_WEIGHT = 40  # 직무 카테고리 매칭
+    EMBEDDING_WEIGHT = 60  # 스킬/설명 유사도
 
     # 매칭 임계값
-    MIN_SCORE_THRESHOLD = 50
+    MIN_SCORE_THRESHOLD = 40
     TOP_K_RESULTS = 10
 
     def calculate_score(
@@ -77,7 +81,7 @@ class ProfileMatcher(MatcherProtocol):
         jobs: List[JobPosting],
         job_embeddings: Dict[str, List[float]],
     ) -> List[MatchResult]:
-        """프로필과 모든 채용 공고 매칭
+        """프로필과 모든 채용 공고 매칭 (2-Stage)
 
         Args:
             profile: 사용자 프로필
@@ -90,38 +94,41 @@ class ProfileMatcher(MatcherProtocol):
         results = []
 
         for job in jobs:
-            # 1단계: 규칙 기반 필터 + 점수
-            score_breakdown = self._calculate_rule_score(profile, job)
+            # ========================================
+            # 1단계: 경력 조건 필터 (Hard Filter)
+            # ========================================
+            if not self._matches_experience(profile.experience_years, job):
+                continue  # 경력 조건 불일치 시 완전 제외
 
-            # 기본 점수가 너무 낮으면 스킵
-            base_score = (
-                score_breakdown.category_score +
-                score_breakdown.experience_score +
-                score_breakdown.location_score
-            )
-            if base_score < 20:  # 최소 기본 점수
-                continue
+            # ========================================
+            # 2단계: 직무 카테고리 + 스킬/설명 유사도
+            # ========================================
+            score_breakdown = ScoreBreakdown()
 
-            # 2단계: 임베딩 유사도
+            # 직무 카테고리 매칭 (40점)
+            job_text = f"{job.title} {job.description or ''}".lower()
+            keywords = CATEGORY_KEYWORDS.get(profile.job_category, [])
+            if any(kw.lower() in job_text for kw in keywords):
+                score_breakdown.category_score = self.CATEGORY_WEIGHT
+
+            # 임베딩 유사도 (60점)
             if profile.embedding and job.id in job_embeddings:
                 raw_similarity = self.calculate_score(
                     profile.embedding,
                     job_embeddings[job.id]
                 )
-                # 0-100 유사도를 0-40 점수로 변환
+                # 0-100 유사도를 0-60 점수로 변환
                 embedding_score = raw_similarity * (self.EMBEDDING_WEIGHT / 100)
                 score_breakdown.embedding_score = embedding_score
 
             total_score = (
                 score_breakdown.category_score +
-                score_breakdown.experience_score +
-                score_breakdown.location_score +
                 score_breakdown.embedding_score
             )
 
             if total_score >= self.MIN_SCORE_THRESHOLD:
-                # 스킬 분석
-                matched_skills, missing_skills = self._analyze_skills(
+                # 스킬 분석 (부족한 스킬만 사용)
+                _, missing_skills = self._analyze_skills(
                     profile.skills,
                     job.tech_stack or []
                 )
@@ -131,7 +138,7 @@ class ProfileMatcher(MatcherProtocol):
                     job_id=job.id,
                     total_score=round(total_score, 1),
                     score_breakdown=score_breakdown,
-                    matched_skills=matched_skills,
+                    matched_skills=[],  # 사용하지 않음
                     missing_skills=missing_skills,
                 ))
 
@@ -203,3 +210,82 @@ class ProfileMatcher(MatcherProtocol):
         missing = [s for s in job_skills if s.lower() not in profile_set]
 
         return matched, missing
+
+
+def format_match_comment(
+    profile: Profile,
+    matches: List[MatchResult],
+    jobs_map: Dict[str, JobPosting],
+) -> str:
+    """매칭 결과를 GitHub Issue 코멘트용 마크다운으로 포맷팅
+
+    Args:
+        profile: 사용자 프로필
+        matches: 매칭 결과 리스트
+        jobs_map: job_id -> JobPosting 매핑
+
+    Returns:
+        마크다운 포맷 문자열
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    lines = [
+        f"## 추천 채용 공고 ({today})",
+        "",
+        f"**{len(matches)}건**의 채용 공고가 프로필과 매칭되었습니다.",
+        "",
+    ]
+
+    if not matches:
+        lines.append("> 현재 매칭된 공고가 없습니다. 프로필 정보를 업데이트하거나 잠시 후 다시 확인해주세요.")
+        return "\n".join(lines)
+
+    # 매칭 결과 테이블
+    lines.extend([
+        "| 회사 | 포지션 | 매칭률 | 마감 | 링크 |",
+        "|------|--------|--------|------|------|",
+    ])
+
+    for match in matches:
+        job = jobs_map.get(match.job_id)
+        if not job:
+            continue
+
+        # 마감일 표시
+        deadline_str = "상시"
+        if job.deadline_text:
+            deadline_str = job.deadline_text
+        elif job.deadline:
+            days_left = (job.deadline - datetime.now()).days
+            if days_left >= 0:
+                deadline_str = f"D-{days_left}"
+            else:
+                deadline_str = "마감"
+
+        # 매칭률
+        score_str = f"{match.total_score:.0f}%"
+
+        # 테이블 행 추가
+        lines.append(
+            f"| {job.company_name} | {job.title} | {score_str} | {deadline_str} | [지원하기]({job.source_url}) |"
+        )
+
+    # 보완하면 좋을 기술 (상위 3개 공고 기준)
+    all_missing_skills = []
+    for match in matches[:3]:
+        all_missing_skills.extend(match.missing_skills)
+
+    if all_missing_skills:
+        unique_missing = list(dict.fromkeys(all_missing_skills))[:5]
+        lines.extend([
+            "",
+            "### 보완하면 좋을 기술",
+            f"> {', '.join(unique_missing)}",
+        ])
+
+    lines.extend([
+        "",
+        "---",
+        "*자동 생성됨 by Recruitment Auto*",
+    ])
+
+    return "\n".join(lines)

@@ -20,6 +20,7 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  issues: write  # 프로필 매칭 코멘트용
 
 jobs:
   crawl:
@@ -51,6 +52,12 @@ jobs:
         run: python -m src.main build-static
         env:
           PYTHONPATH: ${{ github.workspace }}
+
+      - name: 프로필 매칭 및 Issue 코멘트
+        run: python -m src.main match-profiles
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 변경사항 커밋
         run: |
