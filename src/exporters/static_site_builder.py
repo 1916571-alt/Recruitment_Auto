@@ -70,26 +70,35 @@ class StaticSiteBuilder:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>채용 정보 대시보드 - 데이터 분석</title>
+    <title>채용 정보 대시보드</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Pretendard', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
     <style>
+        body { font-family: 'Pretendard', sans-serif; }
         .new-badge { animation: pulse 2s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
         .card-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); }
         .source-saramin { border-left-color: #0066cc; }
-        .source-jobkorea { border-left-color: #ff6600; }
-        .source-wanted { border-left-color: #3366ff; }
-        .source-rocketpunch { border-left-color: #6366f1; }
-        .source-linkedin { border-left-color: #0077b5; }
         .source-inthiswork { border-left-color: #22c55e; }
-        .source-perplexity { border-left-color: #8b5cf6; }
-        .source-google { border-left-color: #ea4335; }
+        .source-google_search { border-left-color: #ea4335; }
         .loading { display: flex; justify-content: center; align-items: center; height: 200px; }
         .spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .filter-active { background-color: #2563eb !important; color: white !important; }
+        .category-active { background-color: #7c3aed !important; color: white !important; }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
+<body class="bg-gray-50 min-h-screen">
     <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
         <div class="max-w-7xl mx-auto px-4 py-4">
             <div class="flex items-center justify-between">
@@ -104,31 +113,54 @@ class StaticSiteBuilder:
     <main class="max-w-7xl mx-auto px-4 py-6">
         <!-- 통계 -->
         <div id="stats" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div class="bg-white rounded-lg shadow p-4">
+            <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
                 <div id="stat-total" class="text-3xl font-bold text-blue-600">-</div>
-                <div class="text-gray-500 text-sm">전체 공고</div>
+                <div class="text-gray-500 text-sm mt-1">전체 공고</div>
             </div>
-            <div class="bg-white rounded-lg shadow p-4">
+            <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
                 <div id="stat-new" class="text-3xl font-bold text-green-600">-</div>
-                <div class="text-gray-500 text-sm">새 공고</div>
+                <div class="text-gray-500 text-sm mt-1">새 공고</div>
             </div>
-            <div class="bg-white rounded-lg shadow p-4">
-                <div id="stat-expiring" class="text-3xl font-bold text-orange-600">-</div>
-                <div class="text-gray-500 text-sm">7일 내 마감</div>
+            <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+                <div id="stat-expiring" class="text-3xl font-bold text-orange-500">-</div>
+                <div class="text-gray-500 text-sm mt-1">7일 내 마감</div>
             </div>
-            <div class="bg-white rounded-lg shadow p-4">
+            <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
                 <div id="stat-sources" class="text-3xl font-bold text-purple-600">-</div>
-                <div class="text-gray-500 text-sm">수집 사이트</div>
+                <div class="text-gray-500 text-sm mt-1">수집 사이트</div>
             </div>
         </div>
 
-        <!-- 필터 -->
-        <div class="bg-white rounded-lg shadow p-4 mb-6">
-            <div class="flex flex-wrap gap-2" id="filters">
-                <button onclick="filterJobs('all')" class="filter-btn active px-4 py-2 rounded-full text-sm font-medium bg-blue-600 text-white" data-filter="all">전체</button>
-                <button onclick="filterJobs('new')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200" data-filter="new">새 공고</button>
-                <button onclick="filterJobs('expiring')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200" data-filter="expiring">마감 임박</button>
+        <!-- 직군 필터 -->
+        <div class="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-100">
+            <div class="text-xs text-gray-500 mb-2 font-medium">직군</div>
+            <div class="flex flex-wrap gap-2" id="category-filters">
+                <button onclick="filterByCategory('all')" class="category-btn category-active px-4 py-2 rounded-full text-sm font-medium transition" data-category="all">전체</button>
+                <button onclick="filterByCategory('data')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition" data-category="data">데이터</button>
+                <button onclick="filterByCategory('backend')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition" data-category="backend">백엔드</button>
+                <button onclick="filterByCategory('frontend')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition" data-category="frontend">프론트엔드</button>
+                <button onclick="filterByCategory('pm')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition" data-category="pm">PM/기획</button>
             </div>
+        </div>
+
+        <!-- 상태 필터 -->
+        <div class="bg-white rounded-xl shadow-sm p-4 mb-6 border border-gray-100">
+            <div class="text-xs text-gray-500 mb-2 font-medium">상태</div>
+            <div class="flex flex-wrap gap-2" id="status-filters">
+                <button onclick="filterByStatus('all')" class="status-btn filter-active px-4 py-2 rounded-full text-sm font-medium transition" data-status="all">전체</button>
+                <button onclick="filterByStatus('new')" class="status-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition" data-status="new">새 공고</button>
+                <button onclick="filterByStatus('expiring')" class="status-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition" data-status="expiring">마감 임박</button>
+            </div>
+        </div>
+
+        <!-- 결과 수 & 정렬 -->
+        <div class="flex items-center justify-between mb-4">
+            <div id="result-count" class="text-sm text-gray-600"></div>
+            <select id="sort-select" onchange="applyFilters()" class="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white">
+                <option value="newest">최신순</option>
+                <option value="deadline">마감임박순</option>
+                <option value="company">회사명순</option>
+            </select>
         </div>
 
         <!-- 채용 공고 목록 -->
@@ -139,17 +171,29 @@ class StaticSiteBuilder:
         </div>
     </main>
 
-    <footer class="bg-white border-t mt-8 py-4">
+    <footer class="bg-white border-t mt-8 py-6">
         <div class="max-w-7xl mx-auto px-4 text-center text-gray-500 text-sm">
-            Recruitment Auto - 채용 정보 자동 수집 에이전트
-            <br>
-            <a href="https://github.com" class="text-blue-500 hover:underline">GitHub</a>에서 자동 업데이트
+            <p class="font-medium">Recruitment Auto</p>
+            <p class="mt-1">채용 정보 자동 수집 에이전트</p>
+            <p class="mt-2">
+                <a href="https://github.com/1916571-alt/Recruitment_Auto" class="text-blue-500 hover:underline">GitHub</a>
+                에서 매일 자동 업데이트
+            </p>
         </div>
     </footer>
 
     <script>
         let allJobs = [];
-        let currentFilter = 'all';
+        let currentCategory = 'all';
+        let currentStatus = 'all';
+
+        // 직군 키워드 매핑
+        const categoryKeywords = {
+            data: ['데이터', 'Data', '분석', 'Analyst', 'Scientist', 'ML', 'AI', 'BI', '머신러닝'],
+            backend: ['백엔드', 'Backend', '서버', 'Server', 'Java', 'Spring', 'Node', 'Python 개발', 'Django', 'FastAPI'],
+            frontend: ['프론트엔드', 'Frontend', 'React', 'Vue', 'Angular', '웹 개발', '퍼블리셔', 'UI', 'UX'],
+            pm: ['기획', 'PM', '프로덕트', 'Product', 'PO', '매니저', 'Manager', 'Owner']
+        };
 
         async function loadJobs() {
             try {
@@ -159,11 +203,11 @@ class StaticSiteBuilder:
                 allJobs = data.jobs || [];
                 updateStats(data.stats);
                 updateTime(data.updated_at);
-                renderJobs(allJobs);
+                applyFilters();
             } catch (error) {
                 console.error('Error loading jobs:', error);
                 document.getElementById('jobs-container').innerHTML = `
-                    <div class="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+                    <div class="bg-white rounded-xl shadow-sm p-8 text-center text-gray-500 border border-gray-100">
                         <p>데이터를 불러올 수 없습니다.</p>
                         <p class="text-sm mt-2">잠시 후 다시 시도해주세요.</p>
                     </div>
@@ -176,8 +220,6 @@ class StaticSiteBuilder:
             document.getElementById('stat-total').textContent = stats.total || 0;
             document.getElementById('stat-new').textContent = stats.new || 0;
             document.getElementById('stat-expiring').textContent = stats.expiring_7days || 0;
-
-            // 소스 수 계산
             const sourceCount = Object.values(stats.by_source || {}).filter(c => c > 0).length;
             document.getElementById('stat-sources').textContent = sourceCount;
         }
@@ -189,30 +231,68 @@ class StaticSiteBuilder:
                 `업데이트: ${date.toLocaleDateString('ko-KR')} ${date.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})}`;
         }
 
-        function filterJobs(filter) {
-            currentFilter = filter;
-
-            // 버튼 스타일 업데이트
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('bg-blue-600', 'text-white');
+        function filterByCategory(category) {
+            currentCategory = category;
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.classList.remove('category-active');
                 btn.classList.add('bg-gray-100', 'text-gray-700');
             });
-            document.querySelector(`[data-filter="${filter}"]`).classList.remove('bg-gray-100', 'text-gray-700');
-            document.querySelector(`[data-filter="${filter}"]`).classList.add('bg-blue-600', 'text-white');
+            document.querySelector(`[data-category="${category}"]`).classList.add('category-active');
+            document.querySelector(`[data-category="${category}"]`).classList.remove('bg-gray-100', 'text-gray-700');
+            applyFilters();
+        }
 
-            let filtered = allJobs;
-            if (filter === 'new') {
-                filtered = allJobs.filter(job => job.is_new);
-            } else if (filter === 'expiring') {
+        function filterByStatus(status) {
+            currentStatus = status;
+            document.querySelectorAll('.status-btn').forEach(btn => {
+                btn.classList.remove('filter-active');
+                btn.classList.add('bg-gray-100', 'text-gray-700');
+            });
+            document.querySelector(`[data-status="${status}"]`).classList.add('filter-active');
+            document.querySelector(`[data-status="${status}"]`).classList.remove('bg-gray-100', 'text-gray-700');
+            applyFilters();
+        }
+
+        function applyFilters() {
+            let filtered = [...allJobs];
+
+            // 직군 필터
+            if (currentCategory !== 'all') {
+                const keywords = categoryKeywords[currentCategory] || [];
+                filtered = filtered.filter(job => {
+                    const text = (job.title + ' ' + (job.description || '')).toLowerCase();
+                    return keywords.some(kw => text.includes(kw.toLowerCase()));
+                });
+            }
+
+            // 상태 필터
+            if (currentStatus === 'new') {
+                filtered = filtered.filter(job => job.is_new);
+            } else if (currentStatus === 'expiring') {
                 const now = new Date();
                 const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-                filtered = allJobs.filter(job => {
+                filtered = filtered.filter(job => {
                     if (!job.deadline) return false;
                     const deadline = new Date(job.deadline);
                     return deadline >= now && deadline <= weekLater;
                 });
             }
 
+            // 정렬
+            const sortBy = document.getElementById('sort-select').value;
+            if (sortBy === 'newest') {
+                filtered.sort((a, b) => new Date(b.crawled_at) - new Date(a.crawled_at));
+            } else if (sortBy === 'deadline') {
+                filtered.sort((a, b) => {
+                    if (!a.deadline) return 1;
+                    if (!b.deadline) return -1;
+                    return new Date(a.deadline) - new Date(b.deadline);
+                });
+            } else if (sortBy === 'company') {
+                filtered.sort((a, b) => a.company_name.localeCompare(b.company_name));
+            }
+
+            document.getElementById('result-count').textContent = `${filtered.length}개의 공고`;
             renderJobs(filtered);
         }
 
@@ -221,7 +301,7 @@ class StaticSiteBuilder:
 
             if (jobs.length === 0) {
                 container.innerHTML = `
-                    <div class="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+                    <div class="bg-white rounded-xl shadow-sm p-8 text-center text-gray-500 border border-gray-100">
                         <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
@@ -233,26 +313,27 @@ class StaticSiteBuilder:
 
             container.innerHTML = jobs.map(job => {
                 const daysLeft = job.deadline ? getDaysUntilDeadline(job.deadline) : null;
+                const sourceLabel = job.source === 'google_search' ? 'Google' : job.source;
 
                 return `
-                    <a href="${job.source_url}" target="_blank" rel="noopener noreferrer" class="block mb-4">
-                        <div class="bg-white rounded-lg shadow p-4 border-l-4 source-${job.source} card-hover transition duration-200">
+                    <a href="${job.source_url}" target="_blank" rel="noopener noreferrer" class="block mb-3">
+                        <div class="bg-white rounded-xl shadow-sm p-4 border-l-4 source-${job.source} card-hover transition duration-200 border border-gray-100">
                             <div class="flex items-start justify-between">
                                 <div class="flex-1">
-                                    <div class="flex items-center gap-2 mb-1">
-                                        ${job.is_new ? '<span class="new-badge bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">NEW</span>' : ''}
-                                        ${daysLeft !== null && daysLeft <= 7 ? `<span class="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">D-${daysLeft}</span>` : ''}
-                                        <span class="text-xs text-gray-500 uppercase">${job.source}</span>
+                                    <div class="flex items-center gap-2 mb-2">
+                                        ${job.is_new ? '<span class="new-badge bg-green-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">NEW</span>' : ''}
+                                        ${daysLeft !== null && daysLeft <= 7 ? `<span class="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">D-${daysLeft}</span>` : ''}
+                                        <span class="text-xs text-gray-400 uppercase font-medium">${sourceLabel}</span>
                                     </div>
-                                    <h3 class="text-lg font-semibold text-gray-800 mb-1">${escapeHtml(job.title)}</h3>
-                                    <div class="flex items-center gap-3 text-sm text-gray-600">
+                                    <h3 class="text-base font-semibold text-gray-800 mb-1 leading-snug">${escapeHtml(job.title)}</h3>
+                                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600">
                                         <span class="font-medium">${escapeHtml(job.company_name)}</span>
-                                        ${job.location ? `<span>${escapeHtml(job.location)}</span>` : ''}
-                                        ${job.experience_text ? `<span class="text-blue-600">${escapeHtml(job.experience_text)}</span>` : ''}
+                                        ${job.location ? `<span class="text-gray-400">${escapeHtml(job.location)}</span>` : ''}
+                                        ${job.experience_text ? `<span class="text-blue-600 font-medium">${escapeHtml(job.experience_text)}</span>` : ''}
                                     </div>
                                 </div>
-                                <div class="text-right text-sm">
-                                    ${job.deadline_text ? `<div class="text-gray-500">마감: ${escapeHtml(job.deadline_text)}</div>` : ''}
+                                <div class="text-right text-sm ml-4 flex-shrink-0">
+                                    ${job.deadline_text ? `<div class="text-gray-500">${escapeHtml(job.deadline_text)}</div>` : ''}
                                     <div class="text-gray-400 text-xs mt-1">${formatDate(job.crawled_at)}</div>
                                 </div>
                             </div>
