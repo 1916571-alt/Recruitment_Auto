@@ -14,6 +14,8 @@ on:
       - main
     paths:
       - 'src/**'
+      - 'config/**'
+      - 'requirements.txt'
       - '.github/workflows/crawl.yml'
 
 permissions:
