@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>채용 정보 대시보드</title>
+    <title>채용 정보 대시보드 - 데이터 분석</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .new-badge { animation: pulse 2s infinite; }
@@ -55,20 +55,10 @@
 
         <!-- 필터 -->
         <div class="bg-white rounded-lg shadow p-4 mb-6">
-            <!-- 상태 필터 -->
-            <div class="flex flex-wrap gap-2 mb-3" id="status-filters">
-                <button onclick="filterByStatus('all')" class="status-btn px-4 py-2 rounded-full text-sm font-medium bg-blue-600 text-white" data-status="all">전체</button>
-                <button onclick="filterByStatus('new')" class="status-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200" data-status="new">새 공고</button>
-                <button onclick="filterByStatus('expiring')" class="status-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200" data-status="expiring">마감 임박</button>
-            </div>
-            <!-- 직군 필터 -->
-            <div class="flex flex-wrap gap-2 border-t pt-3" id="category-filters">
-                <span class="text-sm text-gray-500 py-2">직군:</span>
-                <button onclick="filterByCategory('all')" class="category-btn px-3 py-1.5 rounded-full text-sm font-medium bg-purple-600 text-white" data-category="all">전체</button>
-                <button onclick="filterByCategory('data')" class="category-btn px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200" data-category="data">데이터</button>
-                <button onclick="filterByCategory('backend')" class="category-btn px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200" data-category="backend">백엔드</button>
-                <button onclick="filterByCategory('frontend')" class="category-btn px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200" data-category="frontend">프론트엔드</button>
-                <button onclick="filterByCategory('pm')" class="category-btn px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200" data-category="pm">PM/기획</button>
+            <div class="flex flex-wrap gap-2" id="filters">
+                <button onclick="filterJobs('all')" class="filter-btn active px-4 py-2 rounded-full text-sm font-medium bg-blue-600 text-white" data-filter="all">전체</button>
+                <button onclick="filterJobs('new')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200" data-filter="new">새 공고</button>
+                <button onclick="filterJobs('expiring')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200" data-filter="expiring">마감 임박</button>
             </div>
         </div>
 
@@ -90,16 +80,7 @@
 
     <script>
         let allJobs = [];
-        let currentStatusFilter = 'all';
-        let currentCategoryFilter = 'all';
-
-        // 직군별 키워드 매핑
-        const categoryKeywords = {
-            data: ['데이터', 'data', 'bi', '분석', 'analyst', 'scientist', '머신러닝', 'ml', 'ai'],
-            backend: ['백엔드', 'backend', '서버', 'java', 'spring', 'python', 'node', 'go', 'kotlin', 'django', 'fastapi'],
-            frontend: ['프론트', 'frontend', 'react', 'vue', 'angular', '퍼블리셔', 'javascript', 'typescript', 'next'],
-            pm: ['기획', 'pm', 'po', '프로덕트', 'product', '매니저', 'manager']
-        };
+        let currentFilter = 'all';
 
         async function loadJobs() {
             try {
@@ -109,7 +90,7 @@
                 allJobs = data.jobs || [];
                 updateStats(data.stats);
                 updateTime(data.updated_at);
-                applyFilters();
+                renderJobs(allJobs);
             } catch (error) {
                 console.error('Error loading jobs:', error);
                 document.getElementById('jobs-container').innerHTML = `
@@ -135,60 +116,28 @@
                 `업데이트: ${date.toLocaleDateString('ko-KR')} ${date.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})}`;
         }
 
-        function filterByStatus(status) {
-            currentStatusFilter = status;
+        function filterJobs(filter) {
+            currentFilter = filter;
 
             // 버튼 스타일 업데이트
-            document.querySelectorAll('.status-btn').forEach(btn => {
+            document.querySelectorAll('.filter-btn').forEach(btn => {
                 btn.classList.remove('bg-blue-600', 'text-white');
                 btn.classList.add('bg-gray-100', 'text-gray-700');
             });
-            document.querySelector(`[data-status="${status}"]`).classList.remove('bg-gray-100', 'text-gray-700');
-            document.querySelector(`[data-status="${status}"]`).classList.add('bg-blue-600', 'text-white');
+            document.querySelector(`[data-filter="${filter}"]`).classList.remove('bg-gray-100', 'text-gray-700');
+            document.querySelector(`[data-filter="${filter}"]`).classList.add('bg-blue-600', 'text-white');
 
-            applyFilters();
-        }
-
-        function filterByCategory(category) {
-            currentCategoryFilter = category;
-
-            // 버튼 스타일 업데이트
-            document.querySelectorAll('.category-btn').forEach(btn => {
-                btn.classList.remove('bg-purple-600', 'text-white');
-                btn.classList.add('bg-gray-100', 'text-gray-700');
-            });
-            document.querySelector(`[data-category="${category}"]`).classList.remove('bg-gray-100', 'text-gray-700');
-            document.querySelector(`[data-category="${category}"]`).classList.add('bg-purple-600', 'text-white');
-
-            applyFilters();
-        }
-
-        function matchesCategory(job, category) {
-            if (category === 'all') return true;
-            const keywords = categoryKeywords[category] || [];
-            const text = `${job.title} ${job.description || ''}`.toLowerCase();
-            return keywords.some(kw => text.includes(kw.toLowerCase()));
-        }
-
-        function applyFilters() {
             let filtered = allJobs;
-
-            // 상태 필터
-            if (currentStatusFilter === 'new') {
-                filtered = filtered.filter(job => job.is_new);
-            } else if (currentStatusFilter === 'expiring') {
+            if (filter === 'new') {
+                filtered = allJobs.filter(job => job.is_new);
+            } else if (filter === 'expiring') {
                 const now = new Date();
                 const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-                filtered = filtered.filter(job => {
+                filtered = allJobs.filter(job => {
                     if (!job.deadline) return false;
                     const deadline = new Date(job.deadline);
                     return deadline >= now && deadline <= weekLater;
                 });
-            }
-
-            // 직군 필터
-            if (currentCategoryFilter !== 'all') {
-                filtered = filtered.filter(job => matchesCategory(job, currentCategoryFilter));
             }
 
             renderJobs(filtered);
