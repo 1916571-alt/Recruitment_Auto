@@ -10,6 +10,7 @@ from loguru import logger
 
 from .base import BaseCrawler
 from src.models import JobPosting, JobSource, ExperienceLevel
+from config.settings import settings
 
 
 class SaraminCrawler(BaseCrawler):
@@ -18,14 +19,16 @@ class SaraminCrawler(BaseCrawler):
     source = JobSource.SARAMIN
     BASE_URL = "https://www.saramin.co.kr"
 
-    # 검색 키워드
-    SEARCH_KEYWORDS = ["데이터 분석", "Data Analyst", "데이터 사이언티스트"]
+    # 검색 키워드 - settings에서 가져옴
+    @property
+    def search_keywords(self) -> list:
+        return settings.filter.job_keywords
 
     async def crawl(self) -> List[JobPosting]:
         """채용 공고 목록 크롤링"""
         all_jobs = []
 
-        for keyword in self.SEARCH_KEYWORDS:
+        for keyword in self.search_keywords:
             jobs = await self._search_jobs(keyword)
             all_jobs.extend(jobs)
             logger.info(f"[사람인] '{keyword}' 검색 결과: {len(jobs)}건")
