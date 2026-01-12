@@ -16,18 +16,18 @@ class FilterConfig(BaseModel):
 
     job_keywords: List[str] = Field(
         default=[
-            "데이터 분석",
-            "데이터분석",
-            "Data Analyst",
-            "Data Analysis",
-            "데이터 사이언티스트",
-            "Data Scientist",
-            "BI 분석",
-            "비즈니스 분석",
-            "데이터 엔지니어",
-            "Data Engineer",
-            "머신러닝",
-            "ML Engineer",
+            # 데이터 분석
+            "데이터 분석", "데이터분석", "Data Analyst", "Data Analysis",
+            "데이터 사이언티스트", "Data Scientist", "BI 분석", "비즈니스 분석",
+            "데이터 엔지니어", "Data Engineer", "머신러닝", "ML Engineer",
+            # 백엔드 개발
+            "백엔드", "Backend", "서버 개발", "Server Developer",
+            "Java 개발", "Spring", "Python 개발", "Node.js",
+            # 프론트엔드 개발
+            "프론트엔드", "Frontend", "React", "Vue", "웹 개발", "퍼블리셔",
+            # PM/기획
+            "서비스 기획", "PM", "프로덕트 매니저", "Product Manager",
+            "IT 기획", "프로덕트 오너", "PO",
         ],
         description="포함할 직무 키워드 (OR 조건)",
     )
