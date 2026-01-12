@@ -321,8 +321,20 @@ def update_embeddings():
 
 
 @app.command("match-profiles")
-def match_profiles():
-    """프로필과 채용 공고 매칭 후 알림"""
+def match_profiles(
+    issue_number: Annotated[Optional[int], Argument(help="매칭할 프로필 Issue 번호")] = None,
+    all_profiles: Annotated[bool, Option("--all", help="모든 프로필 매칭")] = False,
+    top_k: Annotated[int, Option(help="추천할 상위 공고 수")] = 10,
+):
+    """프로필과 채용 공고 매칭 후 추천 공고를 Issue 코멘트로 전달
+
+    Examples:
+        # 특정 프로필 매칭
+        python -m src.main match-profiles 1
+
+        # 모든 프로필 매칭
+        python -m src.main match-profiles --all
+    """
     console.print("[bold blue]프로필 매칭 시작...[/]")
 
     async def run():
@@ -334,7 +346,7 @@ def match_profiles():
         config = get_config()
 
         # 서비스 초기화
-        github_service = GitHubService()
+        github_service = GitHubService(token=config.github_token)
         embedding_service = SentenceTransformerEmbedding()
         matcher = ProfileMatcher()
         notifier = GitHubNotifier(github_service)
@@ -346,22 +358,21 @@ def match_profiles():
         for issue in issues:
             profile = github_service.parse_issue_to_profile(issue)
             if profile:
+                if issue_number and str(profile.id) != str(issue_number):
+                    continue
                 profiles.append(profile)
 
         if not profiles:
             console.print("[yellow]등록된 프로필이 없습니다.[/]")
             return
 
+        if not all_profiles and not issue_number:
+            console.print("[yellow]프로필 Issue 번호를 지정하거나 --all 옵션을 사용하세요.[/]")
+            return
+
         console.print(f"  프로필 {len(profiles)}개 로드됨")
 
-        # 2. 프로필 임베딩
-        console.print("[cyan]프로필 임베딩 생성 중...[/]")
-        profile_texts = [p.to_embedding_text() for p in profiles]
-        profile_embeddings = await embedding_service.embed_batch(profile_texts)
-        for profile, emb in zip(profiles, profile_embeddings):
-            profile.embedding = emb
-
-        # 3. 채용 공고 로드
+        # 2. 채용 공고 로드
         console.print("[cyan]채용 공고 로드 중...[/]")
         with open(config.jobs_json_path, "r", encoding="utf-8") as f:
             jobs_data = json.load(f)
@@ -370,7 +381,7 @@ def match_profiles():
         jobs_map = {j.id: j for j in jobs}
         console.print(f"  채용 공고 {len(jobs)}개 로드됨")
 
-        # 4. 채용 공고 임베딩 로드
+        # 3. 채용 공고 임베딩 로드
         if not embedding_service.embeddings_exist("jobs"):
             console.print("[yellow]채용 공고 임베딩이 없습니다. update-embeddings를 먼저 실행하세요.[/]")
             return
@@ -378,22 +389,52 @@ def match_profiles():
         job_ids, job_emb_arr = embedding_service.load_embeddings("jobs")
         job_embeddings = dict(zip(job_ids, job_emb_arr.tolist()))
 
-        # 5. 매칭 실행
+        # 4. 매칭 실행
         console.print("[cyan]매칭 실행 중...[/]")
         for profile in profiles:
-            matches = matcher.match_profile_to_jobs(
-                profile, jobs, job_embeddings
-            )
+            console.print(f"\n[bold cyan]#{profile.id} @{profile.github_username} 매칭 중...[/]")
+
+            # 프로필 임베딩
+            profile_texts = [profile.to_embedding_text()]
+            profile_embeddings = await embedding_service.embed_batch(profile_texts)
+            profile.embedding = profile_embeddings[0]
+
+            # 매칭
+            matches = matcher.match_profile_to_jobs(profile, jobs, job_embeddings)
+            matches = matches[:top_k]
 
             if matches:
+                # 매칭 결과 테이블
+                match_table = Table(title="매칭 결과", show_header=True, header_style="bold")
+                match_table.add_column("회사", style="cyan")
+                match_table.add_column("포지션", style="white")
+                match_table.add_column("매칭률", style="green")
+                match_table.add_column("URL", style="blue")
+
+                for match in matches[:5]:
+                    job = jobs_map.get(match.job_id)
+                    if job:
+                        match_table.add_row(
+                            job.company_name[:15],
+                            job.title[:25] + "..." if len(job.title) > 25 else job.title,
+                            f"{match.total_score:.0f}%",
+                            job.source_url[:40] + "..." if len(job.source_url) > 40 else job.source_url
+                        )
+
+                console.print(match_table)
+
+                # GitHub Issue 코멘트 작성
                 comment = notifier.format_match_comment(matches, jobs_map)
                 success = await notifier.notify(profile.id, "매칭 결과", comment)
-                status = "[green]알림 전송[/]" if success else "[red]알림 실패[/]"
-                console.print(f"  #{profile.id} @{profile.github_username}: {len(matches)}건 매칭 - {status}")
-            else:
-                console.print(f"  #{profile.id} @{profile.github_username}: 매칭 없음")
 
-        console.print("[bold green]매칭 완료![/]")
+                if success:
+                    console.print(f"  [green]Issue #{profile.id}에 추천 공고 코멘트 완료[/]")
+                else:
+                    console.print(f"  [red]코멘트 작성 실패[/]")
+            else:
+                console.print(f"  [yellow]매칭된 공고가 없습니다.[/]")
+
+        console.print("\n[bold green]매칭 완료![/]")
 
     asyncio.run(run())
 
@@ -432,6 +473,151 @@ def list_profiles():
 
         console.print(table)
         console.print(f"\n총 {len(issues)}개 프로필")
+
+    asyncio.run(run())
+
+
+@app.command("analyze-gap")
+def analyze_gap(
+    issue_number: Annotated[Optional[int], Argument(help="분석할 프로필 Issue 번호")] = None,
+    all_profiles: Annotated[bool, Option("--all", help="모든 프로필 분석")] = False,
+    top_k: Annotated[int, Option(help="분석할 상위 매칭 공고 수")] = 10,
+    skip_llm: Annotated[bool, Option("--skip-llm", help="LLM 조언 생성 건너뛰기")] = False,
+):
+    """프로필 vs 채용 공고 갭 분석 및 커리어 조언 생성
+
+    Groq API (Llama 3.3 70B)를 사용하여 부족한 기술 학습 로드맵,
+    포트폴리오 강화 포인트, 자기소개서 키워드를 추천합니다.
+
+    Examples:
+        # 특정 프로필 분석
+        python -m src.main analyze-gap 5
+
+        # 모든 프로필 분석
+        python -m src.main analyze-gap --all
+
+        # LLM 조언 없이 갭 분석만
+        python -m src.main analyze-gap 5 --skip-llm
+    """
+    console.print("[bold blue]갭 분석을 시작합니다...[/]")
+
+    async def run():
+        from src.services.github_service import GitHubService
+        from src.services.gap_analysis_service import GapAnalyzer, GroqLLM, format_gap_analysis_comment
+        from src.services.matching_service import ProfileMatcher
+        from src.services.embedding_service import SentenceTransformerEmbedding
+
+        config = get_config()
+
+        # 서비스 초기화
+        github_service = GitHubService(token=config.github_token)
+        embedding_service = SentenceTransformerEmbedding()
+        matcher = ProfileMatcher()
+
+        # LLM 초기화 (skip_llm이 아닌 경우)
+        llm = None
+        if not skip_llm:
+            if not config.groq_api_key:
+                console.print("[yellow]GROQ_API_KEY가 설정되지 않았습니다. --skip-llm 옵션을 사용하세요.[/]")
+                return
+            llm = GroqLLM(api_key=config.groq_api_key, model=config.groq_model)
+
+        gap_analyzer = GapAnalyzer(llm=llm)
+
+        # 1. 프로필 로드
+        console.print("[cyan]GitHub Issues에서 프로필 로드 중...[/]")
+        issues = await github_service.get_profile_issues()
+        profiles = []
+        for issue in issues:
+            profile = github_service.parse_issue_to_profile(issue)
+            if profile:
+                if issue_number and str(profile.id) != str(issue_number):
+                    continue
+                profiles.append(profile)
+
+        if not profiles:
+            console.print("[yellow]분석할 프로필이 없습니다.[/]")
+            return
+
+        if not all_profiles and not issue_number:
+            console.print("[yellow]프로필 Issue 번호를 지정하거나 --all 옵션을 사용하세요.[/]")
+            return
+
+        console.print(f"  프로필 {len(profiles)}개 로드됨")
+
+        # 2. 채용 공고 로드
+        console.print("[cyan]채용 공고 로드 중...[/]")
+        with open(config.jobs_json_path, "r", encoding="utf-8") as f:
+            jobs_data = json.load(f)
+
+        jobs = [JobPosting(**j) for j in jobs_data.get("jobs", [])]
+        console.print(f"  채용 공고 {len(jobs)}개 로드됨")
+
+        # 3. 임베딩 로드
+        if not embedding_service.embeddings_exist("jobs"):
+            console.print("[yellow]채용 공고 임베딩이 없습니다. update-embeddings를 먼저 실행하세요.[/]")
+            return
+
+        job_ids, job_emb_arr = embedding_service.load_embeddings("jobs")
+        job_embeddings = dict(zip(job_ids, job_emb_arr.tolist()))
+        jobs_map = {j.id: j for j in jobs}
+
+        # 4. 각 프로필에 대해 분석
+        for profile in profiles:
+            console.print(f"\n[bold cyan]#{profile.id} @{profile.github_username} 분석 중...[/]")
+
+            # 프로필 임베딩
+            profile_texts = [profile.to_embedding_text()]
+            profile_embeddings = await embedding_service.embed_batch(profile_texts)
+            profile.embedding = profile_embeddings[0]
+
+            # 매칭된 상위 공고 찾기
+            matches = matcher.match_profile_to_jobs(profile, jobs, job_embeddings)
+            matched_jobs = [jobs_map[m.job_id] for m in matches[:top_k] if m.job_id in jobs_map]
+
+            if not matched_jobs:
+                console.print("  [yellow]매칭된 공고가 없습니다.[/]")
+                continue
+
+            console.print(f"  상위 {len(matched_jobs)}개 공고로 분석")
+
+            # 갭 분석
+            gap_result = gap_analyzer.analyze_gaps(profile, matched_jobs)
+
+            # 갭 분석 결과 테이블
+            gap_table = Table(title="갭 분석 결과", show_header=True, header_style="bold")
+            gap_table.add_column("항목", style="cyan")
+            gap_table.add_column("내용", style="green")
+
+            gap_table.add_row("분석 공고 수", str(gap_result.total_jobs_analyzed))
+            gap_table.add_row("필수 기술 충족률", f"{gap_result.match_coverage}%")
+            gap_table.add_row("매칭된 기술", ", ".join([s.skill_name for s in gap_result.matched_skills[:5]]))
+            gap_table.add_row("부족한 기술", ", ".join(gap_result.top_missing_skills))
+
+            console.print(gap_table)
+
+            # LLM 커리어 조언
+            career_advice = None
+            if not skip_llm:
+                console.print("  [cyan]Groq API로 커리어 조언 생성 중...[/]")
+                career_advice = await gap_analyzer.generate_career_advice(
+                    profile, gap_result, matched_jobs
+                )
+                console.print("  [green]커리어 조언 생성 완료![/]")
+
+                if career_advice.executive_summary:
+                    console.print(f"\n  [bold]요약:[/] {career_advice.executive_summary}")
+
+            # GitHub Issue 코멘트 작성
+            comment = format_gap_analysis_comment(gap_result, career_advice)
+            success = await github_service.post_comment(int(profile.id), comment)
+
+            if success:
+                console.print(f"  [green]Issue #{profile.id}에 분석 결과 코멘트 완료[/]")
+            else:
+                console.print(f"  [red]코멘트 작성 실패[/]")
+
+        console.print("\n[bold green]갭 분석 완료![/]")
 
     asyncio.run(run())
 

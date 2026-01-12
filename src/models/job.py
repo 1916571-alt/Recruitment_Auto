@@ -11,6 +11,7 @@ class JobSource(str, Enum):
     """채용 사이트 소스"""
     SARAMIN = "saramin"
     INTHISWORK = "inthiswork"  # 인디스워크 (데이터 분석 전문)
+    GOOGLE_SEARCH = "google_search"  # Google Custom Search API
 
 
 class ExperienceLevel(str, Enum):
