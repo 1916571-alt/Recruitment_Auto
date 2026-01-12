@@ -53,8 +53,13 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
 
+      - name: 임베딩 업데이트
+        run: python -m src.main update-embeddings
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
       - name: 프로필 매칭 및 Issue 코멘트
-        run: python -m src.main match-profiles
+        run: python -m src.main match-profiles --all
         env:
           PYTHONPATH: ${{ github.workspace }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
