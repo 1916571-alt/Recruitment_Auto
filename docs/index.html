@@ -3,252 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>채용 정보 대시보드 | Recruitment Auto</title>
-    <meta name="description" content="신입/주니어 개발자를 위한 채용 정보 자동 수집 대시보드">
+    <title>채용 정보 대시보드 - 데이터 분석</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: { DEFAULT: '#3B82F6', dark: '#2563EB', light: '#DBEAFE' },
-                        surface: '#FFFFFF',
-                        background: '#F8FAFC',
-                    },
-                    fontFamily: {
-                        sans: ['Pretendard', 'system-ui', 'sans-serif'],
-                    }
-                }
-            }
-        }
-    </script>
     <style>
-        html { word-break: keep-all; overflow-wrap: break-word; }
-        body { font-family: 'Pretendard', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
-
-        /* Animations */
-        .pulse-badge { animation: pulse 2s infinite; }
+        .new-badge { animation: pulse 2s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
-
-        .card-hover { transition: all 0.2s ease; }
-        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.12); }
-
-        /* Source colors */
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); }
         .source-saramin { border-left-color: #0066cc; }
-        .source-inthiswork { border-left-color: #10B981; }
-        .source-google_search { border-left-color: #EA4335; }
-
-        /* Loading */
-        .spinner {
-            width: 40px; height: 40px;
-            border: 3px solid #E2E8F0;
-            border-top-color: #3B82F6;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        /* Scrollbar */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
-
-        /* Filter buttons */
-        .filter-btn { transition: all 0.15s ease; }
-        .filter-btn:active { transform: scale(0.97); }
-
-        /* Category colors */
-        .cat-data { --cat-color: #8B5CF6; }
-        .cat-backend { --cat-color: #10B981; }
-        .cat-frontend { --cat-color: #F59E0B; }
-        .cat-pm { --cat-color: #EC4899; }
+        .source-jobkorea { border-left-color: #ff6600; }
+        .source-wanted { border-left-color: #3366ff; }
+        .source-rocketpunch { border-left-color: #6366f1; }
+        .source-linkedin { border-left-color: #0077b5; }
+        .source-jobtalio { border-left-color: #22c55e; }
+        .loading { display: flex; justify-content: center; align-items: center; height: 200px; }
+        .spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
-<body class="bg-background min-h-screen">
-    <!-- Header -->
-    <header class="bg-surface border-b border-slate-200 sticky top-0 z-50">
-        <div class="max-w-6xl mx-auto px-4 sm:px-6">
-            <div class="flex items-center justify-between h-16">
-                <div class="flex items-center gap-3">
-                    <div class="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
-                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                    </div>
-                    <div>
-                        <h1 class="text-lg font-bold text-slate-900">Recruitment Auto</h1>
-                        <p class="text-xs text-slate-500 hidden sm:block">신입/주니어 채용 정보</p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-4">
-                    <span id="update-time" class="text-sm text-slate-500"></span>
-                    <a href="https://github.com/1916571-alt/Recruitment_Auto" target="_blank" class="p-2 hover:bg-slate-100 rounded-lg transition-colors">
-                        <svg class="w-5 h-5 text-slate-600" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-                        </svg>
-                    </a>
+<body class="bg-gray-100 min-h-screen">
+    <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <h1 class="text-xl font-bold text-gray-800">채용 정보 대시보드</h1>
+                <div class="text-sm text-gray-500">
+                    <span id="update-time">업데이트: -</span>
                 </div>
             </div>
         </div>
-    </header>
+    </nav>
 
-    <main class="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-        <!-- Stats Cards -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div class="bg-surface rounded-2xl border border-slate-200 p-5">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                        </svg>
-                    </div>
-                    <div>
-                        <p id="stat-total" class="text-2xl font-bold text-slate-900">-</p>
-                        <p class="text-sm text-slate-500">전체 공고</p>
-                    </div>
-                </div>
+    <main class="max-w-7xl mx-auto px-4 py-6">
+        <!-- 통계 -->
+        <div id="stats" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white rounded-lg shadow p-4">
+                <div id="stat-total" class="text-3xl font-bold text-blue-600">-</div>
+                <div class="text-gray-500 text-sm">전체 공고</div>
             </div>
-            <div class="bg-surface rounded-2xl border border-slate-200 p-5">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
-                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                    </div>
-                    <div>
-                        <p id="stat-new" class="text-2xl font-bold text-slate-900">-</p>
-                        <p class="text-sm text-slate-500">새 공고</p>
-                    </div>
-                </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div id="stat-new" class="text-3xl font-bold text-green-600">-</div>
+                <div class="text-gray-500 text-sm">새 공고</div>
             </div>
-            <div class="bg-surface rounded-2xl border border-slate-200 p-5">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
-                        <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                    </div>
-                    <div>
-                        <p id="stat-expiring" class="text-2xl font-bold text-slate-900">-</p>
-                        <p class="text-sm text-slate-500">7일 내 마감</p>
-                    </div>
-                </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div id="stat-expiring" class="text-3xl font-bold text-orange-600">-</div>
+                <div class="text-gray-500 text-sm">7일 내 마감</div>
             </div>
-            <div class="bg-surface rounded-2xl border border-slate-200 p-5">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center">
-                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-                        </svg>
-                    </div>
-                    <div>
-                        <p id="stat-sources" class="text-2xl font-bold text-slate-900">3</p>
-                        <p class="text-sm text-slate-500">수집 사이트</p>
-                    </div>
-                </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div id="stat-sources" class="text-3xl font-bold text-purple-600">2</div>
+                <div class="text-gray-500 text-sm">수집 사이트</div>
             </div>
         </div>
 
-        <!-- Filters -->
-        <div class="bg-surface rounded-2xl border border-slate-200 p-4 mb-6">
-            <!-- Status Filter -->
-            <div class="flex flex-wrap items-center gap-2 mb-4">
-                <span class="text-sm font-medium text-slate-600 mr-2">상태</span>
-                <button onclick="filterByStatus('all')" class="status-btn filter-btn px-4 py-2 rounded-full text-sm font-medium bg-primary text-white" data-status="all">
-                    전체
-                </button>
-                <button onclick="filterByStatus('new')" class="status-btn filter-btn px-4 py-2 rounded-full text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200" data-status="new">
-                    <span class="inline-block w-2 h-2 rounded-full bg-green-500 mr-1.5"></span>새 공고
-                </button>
-                <button onclick="filterByStatus('expiring')" class="status-btn filter-btn px-4 py-2 rounded-full text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200" data-status="expiring">
-                    <span class="inline-block w-2 h-2 rounded-full bg-orange-500 mr-1.5"></span>마감 임박
-                </button>
-            </div>
-
-            <!-- Category Filter -->
-            <div class="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100">
-                <span class="text-sm font-medium text-slate-600 mr-2">직군</span>
-                <button onclick="filterByCategory('all')" class="category-btn filter-btn px-4 py-2 rounded-full text-sm font-medium bg-slate-800 text-white" data-category="all">
-                    전체
-                </button>
-                <button onclick="filterByCategory('data')" class="category-btn filter-btn px-4 py-2 rounded-full text-sm font-medium bg-slate-100 text-slate-600 hover:bg-violet-50 hover:text-violet-700" data-category="data">
-                    <span class="inline-block w-2 h-2 rounded-full bg-violet-500 mr-1.5"></span>데이터
-                </button>
-                <button onclick="filterByCategory('backend')" class="category-btn filter-btn px-4 py-2 rounded-full text-sm font-medium bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700" data-category="backend">
-                    <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></span>백엔드
-                </button>
-                <button onclick="filterByCategory('frontend')" class="category-btn filter-btn px-4 py-2 rounded-full text-sm font-medium bg-slate-100 text-slate-600 hover:bg-amber-50 hover:text-amber-700" data-category="frontend">
-                    <span class="inline-block w-2 h-2 rounded-full bg-amber-500 mr-1.5"></span>프론트엔드
-                </button>
-                <button onclick="filterByCategory('pm')" class="category-btn filter-btn px-4 py-2 rounded-full text-sm font-medium bg-slate-100 text-slate-600 hover:bg-pink-50 hover:text-pink-700" data-category="pm">
-                    <span class="inline-block w-2 h-2 rounded-full bg-pink-500 mr-1.5"></span>PM/기획
-                </button>
+        <!-- 필터 -->
+        <div class="bg-white rounded-lg shadow p-4 mb-6">
+            <div class="flex flex-wrap gap-2" id="filters">
+                <button onclick="filterJobs('all')" class="filter-btn active px-4 py-2 rounded-full text-sm font-medium bg-blue-600 text-white" data-filter="all">전체</button>
+                <button onclick="filterJobs('new')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200" data-filter="new">새 공고</button>
+                <button onclick="filterJobs('expiring')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200" data-filter="expiring">마감 임박</button>
             </div>
         </div>
 
-        <!-- Job Count -->
-        <div class="flex items-center justify-between mb-4">
-            <p id="job-count" class="text-sm text-slate-500">공고 로딩 중...</p>
-            <select id="sort-select" onchange="sortJobs(this.value)" class="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20">
-                <option value="latest">최신순</option>
-                <option value="deadline">마감임박순</option>
-                <option value="company">회사명순</option>
-            </select>
-        </div>
-
-        <!-- Jobs Container -->
+        <!-- 채용 공고 목록 -->
         <div id="jobs-container">
-            <div class="flex items-center justify-center py-20">
+            <div class="loading">
                 <div class="spinner"></div>
             </div>
         </div>
     </main>
 
-    <!-- Footer -->
-    <footer class="bg-surface border-t border-slate-200 mt-12">
-        <div class="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-            <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                    </div>
-                    <div>
-                        <p class="font-semibold text-slate-900">Recruitment Auto</p>
-                        <p class="text-xs text-slate-500">매일 09:00 자동 업데이트</p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-6 text-sm text-slate-500">
-                    <a href="https://github.com/1916571-alt/Recruitment_Auto/issues/new" target="_blank" class="hover:text-primary transition-colors">프로필 등록</a>
-                    <a href="https://github.com/1916571-alt/Recruitment_Auto" target="_blank" class="hover:text-primary transition-colors">GitHub</a>
-                </div>
-            </div>
+    <footer class="bg-white border-t mt-8 py-4">
+        <div class="max-w-7xl mx-auto px-4 text-center text-gray-500 text-sm">
+            Recruitment Auto - 채용 정보 자동 수집 에이전트
+            <br>
+            <a href="https://github.com" class="text-blue-500 hover:underline">GitHub</a>에서 자동 업데이트
         </div>
     </footer>
 
     <script>
         let allJobs = [];
-        let currentStatusFilter = 'all';
-        let currentCategoryFilter = 'all';
-        let currentSort = 'latest';
-
-        // Category keywords mapping
-        const categoryKeywords = {
-            data: ['데이터', 'data', 'bi', '분석', 'analyst', 'scientist', '머신러닝', 'ml', 'ai', 'engineer'],
-            backend: ['백엔드', 'backend', '서버', 'server', 'java', 'spring', 'python', 'node', 'go', 'kotlin', 'django', 'fastapi', 'nest'],
-            frontend: ['프론트', 'frontend', 'front-end', 'react', 'vue', 'angular', '퍼블리셔', 'javascript', 'typescript', 'next', 'nuxt'],
-            pm: ['기획', 'pm', 'po', '프로덕트', 'product', '매니저', 'manager', 'planner', '서비스기획']
-        };
-
-        // Source display names
-        const sourceNames = {
-            saramin: '사람인',
-            inthiswork: '인디스워크',
-            google_search: 'Google'
-        };
+        let currentFilter = 'all';
 
         async function loadJobs() {
             try {
@@ -258,18 +90,13 @@
                 allJobs = data.jobs || [];
                 updateStats(data.stats);
                 updateTime(data.updated_at);
-                applyFilters();
+                renderJobs(allJobs);
             } catch (error) {
                 console.error('Error loading jobs:', error);
                 document.getElementById('jobs-container').innerHTML = `
-                    <div class="bg-surface rounded-2xl border border-slate-200 p-12 text-center">
-                        <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
-                            <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
-                        </div>
-                        <p class="text-slate-900 font-medium mb-1">데이터를 불러올 수 없습니다</p>
-                        <p class="text-sm text-slate-500">잠시 후 다시 시도해주세요</p>
+                    <div class="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+                        <p>데이터를 불러올 수 없습니다.</p>
+                        <p class="text-sm mt-2">잠시 후 다시 시도해주세요.</p>
                     </div>
                 `;
             }
@@ -277,109 +104,42 @@
 
         function updateStats(stats) {
             if (!stats) return;
-            document.getElementById('stat-total').textContent = (stats.total || 0).toLocaleString();
-            document.getElementById('stat-new').textContent = (stats.new || 0).toLocaleString();
-            document.getElementById('stat-expiring').textContent = (stats.expiring_7days || 0).toLocaleString();
+            document.getElementById('stat-total').textContent = stats.total || 0;
+            document.getElementById('stat-new').textContent = stats.new || 0;
+            document.getElementById('stat-expiring').textContent = stats.expiring_7days || 0;
         }
 
         function updateTime(isoString) {
             if (!isoString) return;
             const date = new Date(isoString);
-            const now = new Date();
-            const diffMs = now - date;
-            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-
-            let timeText;
-            if (diffHours < 1) {
-                timeText = '방금 전 업데이트';
-            } else if (diffHours < 24) {
-                timeText = `${diffHours}시간 전 업데이트`;
-            } else {
-                timeText = date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) + ' 업데이트';
-            }
-
-            document.getElementById('update-time').textContent = timeText;
+            document.getElementById('update-time').textContent =
+                `업데이트: ${date.toLocaleDateString('ko-KR')} ${date.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})}`;
         }
 
-        function filterByStatus(status) {
-            currentStatusFilter = status;
-            updateStatusButtons(status);
-            applyFilters();
-        }
+        function filterJobs(filter) {
+            currentFilter = filter;
 
-        function filterByCategory(category) {
-            currentCategoryFilter = category;
-            updateCategoryButtons(category);
-            applyFilters();
-        }
-
-        function updateStatusButtons(active) {
-            document.querySelectorAll('.status-btn').forEach(btn => {
-                const isActive = btn.dataset.status === active;
-                btn.classList.toggle('bg-primary', isActive);
-                btn.classList.toggle('text-white', isActive);
-                btn.classList.toggle('bg-slate-100', !isActive);
-                btn.classList.toggle('text-slate-600', !isActive);
+            // 버튼 스타일 업데이트
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600', 'text-white');
+                btn.classList.add('bg-gray-100', 'text-gray-700');
             });
-        }
+            document.querySelector(`[data-filter="${filter}"]`).classList.remove('bg-gray-100', 'text-gray-700');
+            document.querySelector(`[data-filter="${filter}"]`).classList.add('bg-blue-600', 'text-white');
 
-        function updateCategoryButtons(active) {
-            document.querySelectorAll('.category-btn').forEach(btn => {
-                const isActive = btn.dataset.category === active;
-                btn.classList.toggle('bg-slate-800', isActive);
-                btn.classList.toggle('text-white', isActive);
-                btn.classList.toggle('bg-slate-100', !isActive);
-                btn.classList.toggle('text-slate-600', !isActive);
-            });
-        }
-
-        function matchesCategory(job, category) {
-            if (category === 'all') return true;
-            const keywords = categoryKeywords[category] || [];
-            const text = `${job.title} ${job.description || ''}`.toLowerCase();
-            return keywords.some(kw => text.includes(kw.toLowerCase()));
-        }
-
-        function sortJobs(sortType) {
-            currentSort = sortType;
-            applyFilters();
-        }
-
-        function applyFilters() {
-            let filtered = [...allJobs];
-
-            // Status filter
-            if (currentStatusFilter === 'new') {
-                filtered = filtered.filter(job => job.is_new);
-            } else if (currentStatusFilter === 'expiring') {
+            let filtered = allJobs;
+            if (filter === 'new') {
+                filtered = allJobs.filter(job => job.is_new);
+            } else if (filter === 'expiring') {
                 const now = new Date();
                 const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-                filtered = filtered.filter(job => {
+                filtered = allJobs.filter(job => {
                     if (!job.deadline) return false;
                     const deadline = new Date(job.deadline);
                     return deadline >= now && deadline <= weekLater;
                 });
             }
 
-            // Category filter
-            if (currentCategoryFilter !== 'all') {
-                filtered = filtered.filter(job => matchesCategory(job, currentCategoryFilter));
-            }
-
-            // Sort
-            if (currentSort === 'latest') {
-                filtered.sort((a, b) => new Date(b.crawled_at) - new Date(a.crawled_at));
-            } else if (currentSort === 'deadline') {
-                filtered.sort((a, b) => {
-                    if (!a.deadline) return 1;
-                    if (!b.deadline) return -1;
-                    return new Date(a.deadline) - new Date(b.deadline);
-                });
-            } else if (currentSort === 'company') {
-                filtered.sort((a, b) => a.company_name.localeCompare(b.company_name));
-            }
-
-            document.getElementById('job-count').textContent = `${filtered.length}개의 공고`;
             renderJobs(filtered);
         }
 
@@ -388,61 +148,45 @@
 
             if (jobs.length === 0) {
                 container.innerHTML = `
-                    <div class="bg-surface rounded-2xl border border-slate-200 p-12 text-center">
-                        <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
-                            <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                        </div>
-                        <p class="text-slate-900 font-medium mb-1">조건에 맞는 공고가 없습니다</p>
-                        <p class="text-sm text-slate-500">다른 필터를 선택해보세요</p>
+                    <div class="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+                        <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p>조건에 맞는 채용 공고가 없습니다.</p>
                     </div>
                 `;
                 return;
             }
 
-            container.innerHTML = `<div class="space-y-3">${jobs.map(renderJobCard).join('')}</div>`;
-        }
+            container.innerHTML = jobs.map(job => {
+                const daysLeft = job.deadline ? getDaysUntilDeadline(job.deadline) : null;
 
-        function renderJobCard(job) {
-            const daysLeft = job.deadline ? getDaysUntilDeadline(job.deadline) : null;
-            const sourceName = sourceNames[job.source] || job.source;
-            const category = detectCategory(job);
-
-            return `
-                <a href="${job.source_url}" target="_blank" rel="noopener noreferrer" class="block">
-                    <div class="bg-surface rounded-xl border border-slate-200 p-5 card-hover border-l-4 source-${job.source}">
-                        <div class="flex items-start justify-between gap-4">
-                            <div class="flex-1 min-w-0">
-                                <div class="flex flex-wrap items-center gap-2 mb-2">
-                                    ${job.is_new ? '<span class="pulse-badge inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">NEW</span>' : ''}
-                                    ${daysLeft !== null && daysLeft <= 7 ? `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">D-${daysLeft}</span>` : ''}
-                                    ${category ? `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">${category}</span>` : ''}
+                return `
+                    <a href="${job.source_url}" target="_blank" rel="noopener noreferrer" class="block mb-4">
+                        <div class="bg-white rounded-lg shadow p-4 border-l-4 source-${job.source} card-hover transition duration-200">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        ${job.is_new ? '<span class="new-badge bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">NEW</span>' : ''}
+                                        ${daysLeft !== null && daysLeft <= 7 ? `<span class="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">D-${daysLeft}</span>` : ''}
+                                        <span class="text-xs text-gray-500 uppercase">${job.source}</span>
+                                    </div>
+                                    <h3 class="text-lg font-semibold text-gray-800 mb-1">${escapeHtml(job.title)}</h3>
+                                    <div class="flex items-center gap-3 text-sm text-gray-600">
+                                        <span class="font-medium">${escapeHtml(job.company_name)}</span>
+                                        ${job.location ? `<span>${escapeHtml(job.location)}</span>` : ''}
+                                        ${job.experience_text ? `<span class="text-blue-600">${escapeHtml(job.experience_text)}</span>` : ''}
+                                    </div>
                                 </div>
-                                <h3 class="text-base font-semibold text-slate-900 mb-1 truncate">${escapeHtml(job.title)}</h3>
-                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                                    <span class="font-medium text-slate-700">${escapeHtml(job.company_name)}</span>
-                                    ${job.location ? `<span class="text-slate-500">${escapeHtml(job.location)}</span>` : ''}
-                                    ${job.experience_text ? `<span class="text-primary font-medium">${escapeHtml(job.experience_text)}</span>` : ''}
+                                <div class="text-right text-sm">
+                                    ${job.deadline_text ? `<div class="text-gray-500">마감: ${escapeHtml(job.deadline_text)}</div>` : ''}
+                                    <div class="text-gray-400 text-xs mt-1">${formatDate(job.crawled_at)}</div>
                                 </div>
-                            </div>
-                            <div class="text-right shrink-0">
-                                <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-slate-50 text-slate-600 mb-2">${sourceName}</span>
-                                ${job.deadline_text ? `<p class="text-xs text-slate-500">${escapeHtml(job.deadline_text)}</p>` : ''}
                             </div>
                         </div>
-                    </div>
-                </a>
-            `;
-        }
-
-        function detectCategory(job) {
-            const text = `${job.title} ${job.description || ''}`.toLowerCase();
-            if (categoryKeywords.data.some(kw => text.includes(kw.toLowerCase()))) return '데이터';
-            if (categoryKeywords.backend.some(kw => text.includes(kw.toLowerCase()))) return '백엔드';
-            if (categoryKeywords.frontend.some(kw => text.includes(kw.toLowerCase()))) return '프론트엔드';
-            if (categoryKeywords.pm.some(kw => text.includes(kw.toLowerCase()))) return 'PM/기획';
-            return '';
+                    </a>
+                `;
+            }).join('');
         }
 
         function getDaysUntilDeadline(deadline) {
@@ -452,6 +196,12 @@
             return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
         }
 
+        function formatDate(isoString) {
+            if (!isoString) return '';
+            const date = new Date(isoString);
+            return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+        }
+
         function escapeHtml(text) {
             if (!text) return '';
             const div = document.createElement('div');
@@ -459,10 +209,10 @@
             return div.innerHTML;
         }
 
-        // Initial load
+        // 초기 로드
         loadJobs();
 
-        // Auto refresh every 5 minutes
+        // 5분마다 새로고침
         setInterval(loadJobs, 5 * 60 * 1000);
     </script>
 </body>
