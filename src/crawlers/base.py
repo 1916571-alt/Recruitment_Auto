@@ -1,151 +1,161 @@
 """
 크롤러 기본 클래스
+
+단일 책임: 크롤러 공통 기능 제공
+의존성 주입: HTTP 클라이언트, 필터를 외부에서 주입 가능
 """
-import asyncio
 import hashlib
-import re
 from abc import ABC, abstractmethod
 from typing import List, Optional
-from datetime import datetime
 
-import aiohttp
 from bs4 import BeautifulSoup
 from loguru import logger
 
+from src.core.config import get_config
+from src.core.interfaces import FilterProtocol, HttpClientProtocol
 from src.models import JobPosting, JobSource
-from config import settings
+from src.services.job_filter import JobFilter
+
+from .http_client import AioHttpClient
 
 
 class BaseCrawler(ABC):
-    """크롤러 기본 클래스"""
+    """크롤러 기본 클래스
 
-    source: JobSource
+    모든 크롤러가 상속받아야 하는 추상 클래스.
+    HTTP 클라이언트와 필터는 의존성 주입으로 제공받습니다.
 
-    def __init__(self):
-        self.settings = settings.crawler
-        self.filter_settings = settings.filter
-        self.session: Optional[aiohttp.ClientSession] = None
+    사용 예시:
+        ```python
+        async with SaraminCrawler() as crawler:
+            jobs = await crawler.crawl()
+        ```
+    """
 
-    async def __aenter__(self):
-        self.session = aiohttp.ClientSession(
-            headers={"User-Agent": self.settings.user_agent},
-            timeout=aiohttp.ClientTimeout(total=self.settings.request_timeout),
-        )
+    source: JobSource  # 하위 클래스에서 정의
+
+    def __init__(
+        self,
+        http_client: Optional[HttpClientProtocol] = None,
+        job_filter: Optional[FilterProtocol] = None,
+    ):
+        """
+        Args:
+            http_client: HTTP 클라이언트. None이면 기본 클라이언트 사용.
+            job_filter: 채용 공고 필터. None이면 기본 필터 사용.
+        """
+        self._config = get_config().crawler
+        self._http_client = http_client
+        self._filter = job_filter or JobFilter()
+        self._owns_client = http_client is None  # 클라이언트 소유 여부
+
+    @property
+    def source_name(self) -> str:
+        """데이터 소스 이름"""
+        return self.source.value
+
+    async def __aenter__(self) -> "BaseCrawler":
+        """컨텍스트 매니저 진입"""
+        if self._http_client is None:
+            self._http_client = AioHttpClient(self._config)
+            await self._http_client.__aenter__()
+            self._owns_client = True
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.session:
-            await self.session.close()
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """컨텍스트 매니저 종료"""
+        if self._owns_client and self._http_client:
+            await self._http_client.__aexit__(exc_type, exc_val, exc_tb)
+            self._http_client = None
+
+    @property
+    def http_client(self) -> HttpClientProtocol:
+        """HTTP 클라이언트"""
+        if self._http_client is None:
+            raise RuntimeError("HTTP client not initialized. Use async with statement.")
+        return self._http_client
 
     async def fetch(self, url: str) -> Optional[str]:
-        """URL에서 HTML 가져오기"""
-        try:
-            await asyncio.sleep(self.settings.request_delay_seconds)
-            async with self.session.get(url) as response:
-                if response.status == 200:
-                    return await response.text()
-                logger.warning(f"Failed to fetch {url}: status {response.status}")
-                return None
-        except Exception as e:
-            logger.error(f"Error fetching {url}: {e}")
-            return None
+        """URL에서 HTML 가져오기
+
+        Args:
+            url: 요청 URL
+
+        Returns:
+            HTML 문자열 또는 None
+        """
+        return await self.http_client.get(url)
 
     async def fetch_json(self, url: str, **kwargs) -> Optional[dict]:
-        """URL에서 JSON 가져오기"""
-        try:
-            await asyncio.sleep(self.settings.request_delay_seconds)
-            async with self.session.get(url, **kwargs) as response:
-                if response.status == 200:
-                    return await response.json()
-                logger.warning(f"Failed to fetch {url}: status {response.status}")
-                return None
-        except Exception as e:
-            logger.error(f"Error fetching {url}: {e}")
-            return None
+        """URL에서 JSON 가져오기
+
+        Args:
+            url: 요청 URL
+            **kwargs: 추가 옵션
+
+        Returns:
+            JSON 딕셔너리 또는 None
+        """
+        return await self.http_client.get_json(url, **kwargs)
 
     def parse_html(self, html: str) -> BeautifulSoup:
-        """HTML 파싱"""
+        """HTML 파싱
+
+        Args:
+            html: HTML 문자열
+
+        Returns:
+            BeautifulSoup 객체
+        """
         return BeautifulSoup(html, "html.parser")
 
     def generate_id(self, source: str, source_id: str) -> str:
-        """고유 ID 생성"""
+        """고유 ID 생성
+
+        MD5 해시 기반으로 고유 ID를 생성합니다.
+
+        Args:
+            source: 데이터 소스 이름
+            source_id: 원본 사이트의 공고 ID
+
+        Returns:
+            12자리 고유 ID
+        """
         unique_str = f"{source}_{source_id}"
         return hashlib.md5(unique_str.encode()).hexdigest()[:12]
 
     def matches_filter(self, job: JobPosting) -> bool:
-        """필터 조건에 맞는지 확인"""
-        # 제외 키워드 체크 (타이틀에서)
-        title_lower = job.title.lower()
-        for exclude in self.filter_settings.exclude_keywords:
-            if exclude.lower() in title_lower:
-                logger.debug(f"제외(타이틀): {job.title} - '{exclude}'")
-                return False
+        """필터 조건에 맞는지 확인
 
-        # 직무 키워드 체크 (OR 조건)
-        job_match = False
-        search_text = f"{job.title} {job.description or ''}".lower()
-        for keyword in self.filter_settings.job_keywords:
-            if keyword.lower() in search_text:
-                job_match = True
-                break
+        Args:
+            job: 확인할 채용 공고
 
-        if not job_match:
-            return False
-
-        # 경력 조건 체크 - 신입 가능한 공고만 포함
-        return self._is_entry_level_friendly(job.experience_text)
-
-    def _is_entry_level_friendly(self, exp_text: Optional[str]) -> bool:
-        """신입이 지원 가능한 공고인지 확인"""
-        if not exp_text:
-            # 경력 조건이 없으면 포함
-            return True
-
-        exp_lower = exp_text.lower().strip()
-
-        # 1. 신입 가능 키워드가 있으면 바로 포함
-        entry_keywords = ["신입", "경력무관", "경력 무관", "인턴", "intern", "entry", "junior", "신입/경력", "경력/신입"]
-        for keyword in entry_keywords:
-            if keyword in exp_lower:
-                return True
-
-        # 2. "경력 N년" 패턴 체크 - 경력직만 요구하면 제외
-        # 패턴: "경력 1년", "경력1년", "경력2년↑", "1년 이상", "1~3년", "경력 1-3년" 등
-        career_patterns = [
-            r'경력\s*(\d+)\s*년?\s*[↑이상]?',  # 경력 1년, 경력1년, 경력2년↑
-            r'(\d+)\s*년\s*이상',               # 1년 이상
-            r'(\d+)\s*~\s*(\d+)\s*년',          # 1~3년
-            r'(\d+)\s*-\s*(\d+)\s*년',          # 1-3년
-            r'(\d+)\s*년\s*[~↑]',               # 1년~, 1년↑
-            r'경력\s*(\d+)\s*[~\-]\s*(\d+)',    # 경력 1~3, 경력 1-3
-        ]
-
-        for pattern in career_patterns:
-            match = re.search(pattern, exp_lower)
-            if match:
-                # 숫자 추출
-                years = [int(g) for g in match.groups() if g and g.isdigit()]
-                if years:
-                    min_years = min(years)
-                    # 1년 이상 경력 요구하면 제외
-                    if min_years >= 1:
-                        logger.debug(f"제외(경력): '{exp_text}' - 최소 {min_years}년 요구")
-                        return False
-
-        # 3. 순수 "경력" 단어만 있고 신입 키워드 없으면 제외
-        if "경력" in exp_lower and not any(k in exp_lower for k in ["신입", "무관"]):
-            logger.debug(f"제외(경력만): '{exp_text}'")
-            return False
-
-        # 그 외의 경우 포함
-        return True
+        Returns:
+            필터 조건 충족 여부
+        """
+        return self._filter.matches(job)
 
     @abstractmethod
     async def crawl(self) -> List[JobPosting]:
-        """채용 공고 크롤링 (구현 필요)"""
+        """채용 공고 크롤링
+
+        하위 클래스에서 반드시 구현해야 합니다.
+
+        Returns:
+            수집된 채용 공고 리스트
+        """
         pass
 
     @abstractmethod
     async def get_job_detail(self, job: JobPosting) -> JobPosting:
-        """채용 공고 상세 정보 가져오기 (구현 필요)"""
+        """채용 공고 상세 정보 가져오기
+
+        하위 클래스에서 반드시 구현해야 합니다.
+
+        Args:
+            job: 기본 정보가 담긴 채용 공고
+
+        Returns:
+            상세 정보가 추가된 채용 공고
+        """
         pass
