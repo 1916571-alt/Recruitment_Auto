@@ -139,6 +139,18 @@ python -m src.main analyze-gap 1 --skip-llm  # LLM 없이
   - 단기/중기 액션 아이템
 - **GitHub Issue 코멘트**로 결과 자동 전송
 
+### Phase 6: 대시보드 UI 개선 ✅ (2026-01-12 구현)
+- **FilterConfig 수정**: 데이터 분석 직군만 필터링되던 버그 수정
+  - `src/core/config.py`의 `job_keywords`에 백엔드/프론트엔드/PM 키워드 추가
+  - 이제 모든 직군 (데이터, 백엔드, 프론트엔드, PM/기획) 공고가 대시보드에 표시됨
+- **대시보드 UI 대폭 개선** (`src/exporters/static_site_builder.py`):
+  - **Pretendard 폰트** 적용 (한글 가독성 향상)
+  - **카테고리 필터**: 전체 / 데이터 / 백엔드 / 프론트엔드 / PM
+  - **상태 필터**: 전체 / 새 공고 / 마감 임박
+  - **정렬 옵션**: 최신순 / 마감임박순 / 회사명순
+  - **카드 디자인 개선**: 그림자, 호버 효과, 태그 스타일
+  - **반응형 레이아웃** 유지
+
 ## 아키텍처 원칙
 
 ### 1. Protocol 기반 인터페이스
@@ -257,6 +269,13 @@ your@email.com
 2. **API 비용**: Groq은 무료, rate limit 있음
 3. **개인정보**: 이메일 등 민감 정보 로깅 금지
 4. **저작권**: 수집 데이터는 개인 학습 목적으로만 사용
+5. **설정 파일 주의**:
+   - `src/core/config.py`의 `FilterConfig`가 실제 필터링에 사용됨
+   - `config/settings.py`는 사람인 크롤러의 검색 키워드로만 사용
+   - 필터 키워드 변경 시 `src/core/config.py` 수정 필요
+6. **대시보드 템플릿**:
+   - `docs/index.html`은 `build-static` 실행 시 덮어씌워짐
+   - UI 변경 시 `src/exporters/static_site_builder.py`의 `_get_html_template()` 수정 필요
 
 ## 문의
 
