@@ -88,7 +88,7 @@
 
         <!-- 결과 수 & 정렬 -->
         <div class="flex items-center justify-between mb-4">
-            <div id="result-count" class="text-2xl font-extrabold text-gray-900"></div>
+            <div id="result-count" class="text-sm text-gray-600"></div>
             <select id="sort-select" onchange="applyFilters()" class="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white">
                 <option value="newest">최신순</option>
                 <option value="deadline">마감임박순</option>
@@ -134,7 +134,7 @@
                 const data = await response.json();
 
                 allJobs = data.jobs || [];
-                updateStats();
+                updateStats(data.stats);
                 updateTime(data.updated_at);
                 applyFilters();
             } catch (error) {
@@ -148,37 +148,12 @@
             }
         }
 
-        function updateStats() {
-            // 현재 선택된 직군 기준으로 통계 계산
-            let filtered = [...allJobs];
-
-            if (currentCategory !== 'all') {
-                const keywords = categoryKeywords[currentCategory] || [];
-                filtered = filtered.filter(job => {
-                    const text = (job.title + ' ' + (job.description || '')).toLowerCase();
-                    return keywords.some(kw => text.includes(kw.toLowerCase()));
-                });
-            }
-
-            const total = filtered.length;
-            const newCount = filtered.filter(j => j.is_new).length;
-
-            // 7일 내 마감 계산
-            const now = new Date();
-            const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-            const expiringCount = filtered.filter(job => {
-                if (!job.deadline) return false;
-                const deadline = new Date(job.deadline);
-                return deadline >= now && deadline <= weekLater;
-            }).length;
-
-            // 수집 사이트 수 (해당 직군에서 사용된 소스만)
-            const sources = new Set(filtered.map(j => j.source));
-            const sourceCount = sources.size;
-
-            document.getElementById('stat-total').textContent = total;
-            document.getElementById('stat-new').textContent = newCount;
-            document.getElementById('stat-expiring').textContent = expiringCount;
+        function updateStats(stats) {
+            if (!stats) return;
+            document.getElementById('stat-total').textContent = stats.total || 0;
+            document.getElementById('stat-new').textContent = stats.new || 0;
+            document.getElementById('stat-expiring').textContent = stats.expiring_7days || 0;
+            const sourceCount = Object.values(stats.by_source || {}).filter(c => c > 0).length;
             document.getElementById('stat-sources').textContent = sourceCount;
         }
 
@@ -191,18 +166,12 @@
 
         function filterByCategory(category) {
             currentCategory = category;
-            // 버튼 스타일 업데이트
             document.querySelectorAll('.category-btn').forEach(btn => {
                 btn.classList.remove('category-active');
                 btn.classList.add('bg-gray-100', 'text-gray-700');
             });
-            const activeBtn = document.querySelector(`.category-btn[data-category="${category}"]`);
-            if (activeBtn) {
-                activeBtn.classList.add('category-active');
-                activeBtn.classList.remove('bg-gray-100', 'text-gray-700');
-            }
-            // 상단 통계 업데이트
-            updateStats();
+            document.querySelector(`[data-category="${category}"]`).classList.add('category-active');
+            document.querySelector(`[data-category="${category}"]`).classList.remove('bg-gray-100', 'text-gray-700');
             applyFilters();
         }
 
