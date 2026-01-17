@@ -28,6 +28,9 @@ class FilterConfig(BaseModel):
             # PM/기획
             "서비스 기획", "PM", "프로덕트 매니저", "Product Manager",
             "IT 기획", "프로덕트 오너", "PO",
+            # 영업/영업관리
+            "영업", "영업관리", "세일즈", "Sales", "Account Manager",
+            "B2B 영업", "B2C 영업", "솔루션 영업", "IT 영업", "기술영업",
         ],
         description="포함할 직무 키워드 (OR 조건)",
     )

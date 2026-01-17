@@ -19,6 +19,7 @@ class JobCategory(str, Enum):
     FULLSTACK = "fullstack"
     PM = "pm"
     DESIGN = "design"
+    SALES = "sales"  # 영업/영업관리
 
 
 class Profile(BaseModel):
