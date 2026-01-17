@@ -8,7 +8,7 @@
 
 - **대시보드**: https://1916571-alt.github.io/Recruitment_Auto/
 - **자동 수집 + 매칭**: 매일 09:00 KST (GitHub Actions)
-- **타겟**: 신입/주니어 (데이터, 백엔드, 프론트엔드, PM/기획)
+- **타겟**: 신입/주니어 (데이터, 백엔드, 프론트엔드, PM/기획, 영업/영업관리)
 
 ## 자동화 파이프라인
 
@@ -116,7 +116,7 @@ python -m src.main analyze-gap 1 --skip-llm  # LLM 없이
 ## 구현 완료된 기능
 
 ### Phase 1-3: 크롤링 및 필터링 ✅
-- 사람인, 인디스워크, Google Search 크롤러
+- 사람인, 인디스워크 크롤러 (Google Search는 현재 비활성화)
 - 키워드 기반 필터링
 - GitHub Pages 대시보드
 
@@ -141,11 +141,11 @@ python -m src.main analyze-gap 1 --skip-llm  # LLM 없이
 
 ### Phase 6: 대시보드 UI 개선 ✅ (2026-01-12 구현)
 - **FilterConfig 수정**: 데이터 분석 직군만 필터링되던 버그 수정
-  - `src/core/config.py`의 `job_keywords`에 백엔드/프론트엔드/PM 키워드 추가
-  - 이제 모든 직군 (데이터, 백엔드, 프론트엔드, PM/기획) 공고가 대시보드에 표시됨
+  - `src/core/config.py`의 `job_keywords`에 백엔드/프론트엔드/PM/영업 키워드 추가
+  - 이제 모든 직군 (데이터, 백엔드, 프론트엔드, PM/기획, 영업/영업관리) 공고가 대시보드에 표시됨
 - **대시보드 UI 대폭 개선** (`src/exporters/static_site_builder.py`):
   - **Pretendard 폰트** 적용 (한글 가독성 향상)
-  - **카테고리 필터**: 전체 / 데이터 / 백엔드 / 프론트엔드 / PM
+  - **카테고리 필터**: 전체 / 데이터 / 백엔드 / 프론트엔드 / PM / 영업/영업관리
   - **상태 필터**: 전체 / 새 공고 / 마감 임박
   - **정렬 옵션**: 최신순 / 마감임박순 / 회사명순
   - **카드 디자인 개선**: 그림자, 호버 효과, 태그 스타일
@@ -262,6 +262,18 @@ your@email.com
 ### 간단한 자기소개 (선택)
 ...
 ```
+
+## 직군 추가 체크리스트
+
+새 직군을 추가할 때 다음 5개 파일을 수정해야 합니다:
+
+| 순서 | 파일 | 수정 내용 |
+|------|------|----------|
+| 1 | `src/models/profile.py` | `JobCategory` enum에 추가 (예: `MARKETING = "marketing"`) |
+| 2 | `src/core/config.py` | `FilterConfig.job_keywords`에 키워드 추가 |
+| 3 | `config/settings.py` | `GOOGLE_SEARCH_QUERIES`, `ACTIVE_JOB_TYPES`, `FilterSettings.job_keywords` |
+| 4 | `src/exporters/static_site_builder.py` | HTML 필터 버튼 (~140줄) + JS `categoryKeywords` (~195줄) |
+| 5 | `README.md`, `CLAUDE.md` | 문서 업데이트 |
 
 ## 주의사항
 
