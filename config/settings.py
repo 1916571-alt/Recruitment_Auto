@@ -41,10 +41,17 @@ GOOGLE_SEARCH_QUERIES: Dict[str, List[str]] = {
         "프로덕트 매니저 신입",
         "IT 기획자 경력무관 채용",
     ],
+    # 영업 직군
+    "sales": [
+        "영업 신입 채용",
+        "영업관리 주니어 채용",
+        "세일즈 신입 채용",
+        "B2B 영업 경력무관",
+    ],
 }
 
 # 활성화할 직군 목록 (빈 리스트면 전체 활성화)
-ACTIVE_JOB_TYPES: List[str] = ["data", "frontend", "backend", "pm"]
+ACTIVE_JOB_TYPES: List[str] = ["data", "frontend", "backend", "pm", "sales"]
 
 
 class FilterSettings(BaseModel):
@@ -63,6 +70,9 @@ class FilterSettings(BaseModel):
         # PM/기획
         "서비스 기획", "PM", "프로덕트 매니저", "Product Manager",
         "IT 기획", "프로덕트 오너", "PO",
+        # 영업
+        "영업", "영업관리", "세일즈", "Sales", "Account Manager",
+        "B2B 영업", "B2C 영업", "솔루션 영업", "IT 영업", "기술영업",
     ]
 
     # 제외 키워드 (타이틀에 이 키워드가 포함되면 제외)

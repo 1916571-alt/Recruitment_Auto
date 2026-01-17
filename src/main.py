@@ -31,18 +31,17 @@ def get_crawlers():
 
     환경변수 설정에 따라 크롤러를 동적으로 로드합니다.
     """
-    config = get_config()
     crawlers = [
         SaraminCrawler,
         InthisworkCrawler,
     ]
 
-    # Google Search는 API 키가 있을 때만 활성화
-    if config.google_api_key and config.google_cse_id:
-        crawlers.append(GoogleSearchCrawler)
-        logger.info("GoogleSearchCrawler 활성화됨")
-    else:
-        logger.debug("GoogleSearchCrawler 비활성화 (API 키 또는 CSE ID 없음)")
+    # Google Search 크롤러 - 현재 비활성화
+    # 활성화하려면 아래 주석 해제
+    # config = get_config()
+    # if config.google_api_key and config.google_cse_id:
+    #     crawlers.append(GoogleSearchCrawler)
+    #     logger.info("GoogleSearchCrawler 활성화됨")
 
     return crawlers
 
