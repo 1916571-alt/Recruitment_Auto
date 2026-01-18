@@ -122,6 +122,8 @@ class JSONExporter:
             "source_url": job.source_url,
             "crawled_at": job.crawled_at.isoformat() if job.crawled_at else None,
             "is_new": job.is_new,
+            "category": job.category,
+            "category_score": job.category_score,
         }
 
     def _calculate_stats(self, jobs: List[dict]) -> dict:
