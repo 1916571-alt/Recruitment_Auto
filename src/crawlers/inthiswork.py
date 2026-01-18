@@ -28,10 +28,13 @@ class InthisworkCrawler(BaseCrawler):
 
         jobs = self._parse_job_list(html)
 
-        # 필터 적용
+        # 필터 적용 + 카테고리 분류
         filtered_jobs = []
         for job in jobs:
-            if self.matches_filter(job):
+            passed, category, score = self._filter.matches_with_category(job)
+            if passed:
+                job.category = category
+                job.category_score = score
                 filtered_jobs.append(job)
 
         logger.info(f"[인디스워크] 총 {len(filtered_jobs)}건 수집 완료 (필터 전: {len(jobs)}건)")
