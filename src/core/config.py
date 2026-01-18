@@ -295,20 +295,17 @@ class FilterConfig(BaseModel):
 
     exclude_keywords: List[str] = Field(
         default=[
-            # 경력직 키워드
+            # 경력직 키워드 (Manager/매니저는 Account Manager, PM 등 유효한 포지션 포함하므로 제외하지 않음)
             "시니어", "Senior", "Sr.", "선임",
             "팀장", "리드", "Lead", "Tech Lead",
             "Principal", "Staff", "Head", "Chief",
-            "매니저", "Manager", "책임",
+            "책임", "파트장", "그룹장",
             # 경력 연차
             "5년 이상", "7년 이상", "10년 이상",
             "5년이상", "7년이상", "10년이상",
             # 단순 업무
             "데이터 입력", "데이터입력", "단순 입력", "자료 입력",
             "문서 정리", "문서정리", "서류 정리",
-            # 비관련 직무
-            "고객센터", "CS", "상담사", "콜센터",
-            "텔레마케팅", "TM", "아웃바운드",
         ],
         description="제외할 키워드",
     )
