@@ -79,7 +79,7 @@ class JobPosting(BaseModel):
     is_new: bool = Field(True, description="새 공고 여부")
 
     # 카테고리 분류 (v2.0)
-    category: Optional[str] = Field(None, description="직군 카테고리 (data, backend, frontend, pm, sales)")
+    category: Optional[str] = Field(None, description="직군 카테고리 (data, backend, frontend, pm, sales, procurement)")
     category_score: Optional[float] = Field(None, description="카테고리 분류 신뢰도 점수")
 
     @field_validator('requirements', 'preferred', 'tech_stack', mode='before')

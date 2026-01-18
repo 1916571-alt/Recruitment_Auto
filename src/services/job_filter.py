@@ -135,7 +135,7 @@ class JobFilter(FilterProtocol):
 
         Args:
             job: 채용 공고
-            category: 카테고리 이름 (data, backend, frontend, pm, sales)
+            category: 카테고리 이름 (data, backend, frontend, pm, sales, procurement)
 
         Returns:
             점수 (음수면 제외 대상)

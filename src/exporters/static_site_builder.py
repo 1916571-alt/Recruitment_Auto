@@ -141,6 +141,7 @@ class StaticSiteBuilder:
                 <button onclick="filterByCategory('frontend')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition" data-category="frontend">프론트엔드</button>
                 <button onclick="filterByCategory('pm')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition" data-category="pm">PM/기획</button>
                 <button onclick="filterByCategory('sales')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition" data-category="sales">영업/영업관리</button>
+                <button onclick="filterByCategory('procurement')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition" data-category="procurement">구매/CRM</button>
             </div>
         </div>
 
@@ -194,7 +195,8 @@ class StaticSiteBuilder:
             backend: ['백엔드', 'Backend', '서버', 'Server', 'Java', 'Spring', 'Node', 'Python 개발', 'Django', 'FastAPI'],
             frontend: ['프론트엔드', 'Frontend', 'React', 'Vue', 'Angular', '웹 개발', '퍼블리셔', 'UI', 'UX'],
             pm: ['기획', 'PM', '프로덕트', 'Product', 'PO', '매니저', 'Manager', 'Owner'],
-            sales: ['영업', '세일즈', 'Sales', 'Account Manager', 'B2B', 'B2C', '솔루션', '기술영업']
+            sales: ['영업', '세일즈', 'Sales', 'Account Manager', 'B2B', 'B2C', '솔루션', '기술영업'],
+            procurement: ['구매', 'CRM', '조달', 'Procurement', '바이어', 'Buyer', '소싱', '고객관계', '리텐션']
         };
 
         async function loadJobs() {
