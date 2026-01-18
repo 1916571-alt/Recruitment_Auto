@@ -275,6 +275,41 @@ your@email.com
 | 4 | `src/exporters/static_site_builder.py` | HTML 필터 버튼 (~140줄) + JS `categoryKeywords` (~195줄) |
 | 5 | `README.md`, `CLAUDE.md` | 문서 업데이트 |
 
+## 개발/테스트 가이드라인
+
+### 크롤러 테스트 시 주의사항 (중요!)
+
+**토큰 절약을 위해 전체 크롤링 테스트를 피하세요.**
+
+```bash
+# ❌ 피해야 할 방식 (전체 크롤링 - 시간/토큰 소모)
+python -m src.main crawl-to-json
+
+# ✅ 권장 방식: 단일 크롤러 단위 테스트
+python -c "
+import asyncio
+from src.crawlers.wanted import WantedCrawler  # 테스트할 크롤러
+
+async def test():
+    async with WantedCrawler() as crawler:
+        jobs = await crawler.crawl()
+        print(f'수집: {len(jobs)}건')
+        if jobs:
+            print(f'첫 공고: {jobs[0].title} @ {jobs[0].company_name}')
+
+asyncio.run(test())
+"
+
+# ✅ 또는 --test 플래그 사용 (제한된 크롤러만 실행)
+python -m src.main crawl-to-json --test
+```
+
+### 크롤러 수정 워크플로우
+
+1. **단일 크롤러 단위 테스트** (위 예시 참조)
+2. **성공 확인 후** GitHub에 푸시
+3. **GitHub Actions에서 전체 테스트** 수행됨
+
 ## 주의사항
 
 1. **크롤링 제한**: 요청 간 2초 대기

@@ -1,11 +1,13 @@
 """
 로켓펀치 크롤러 (스타트업 특화)
 
-로켓펀치는 API와 HTML 모두 지원합니다.
+로켓펀치는 Next.js SPA로 전환되어 sitemap 기반 크롤링을 사용합니다.
 """
 import re
+import gzip
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
+from io import BytesIO
 
 from loguru import logger
 
@@ -18,254 +20,125 @@ class RocketPunchCrawler(BaseCrawler):
 
     source = JobSource.ROCKETPUNCH
     BASE_URL = "https://www.rocketpunch.com"
-    API_URL = "https://www.rocketpunch.com/api"
+    SITEMAP_URL = "https://image.rocketpunch.com/sitemap/jobs-0.xml.gz"
 
-    # 페이지네이션 설정
-    MAX_PAGES = 3
-    ITEMS_PER_PAGE = 20
-
-    # 직군별 태그
-    JOB_TAGS = {
-        "backend": ["서버", "백엔드", "Backend", "Server"],
-        "frontend": ["프론트엔드", "Frontend", "웹개발"],
-        "data": ["데이터", "Data", "AI", "ML", "머신러닝"],
-        "pm": ["PM", "기획", "프로덕트"],
-    }
+    # 최대 수집 개수
+    MAX_JOBS = 50
 
     async def crawl(self) -> List[JobPosting]:
-        """채용 공고 목록 크롤링"""
+        """sitemap에서 최근 채용 공고 크롤링"""
+        # 1. sitemap에서 최근 채용공고 URL 추출
+        job_urls = await self._fetch_sitemap_urls()
+
+        if not job_urls:
+            logger.warning("[로켓펀치] sitemap에서 채용공고를 찾을 수 없습니다")
+            return []
+
+        logger.info(f"[로켓펀치] sitemap에서 {len(job_urls)}개 URL 발견, 최근 {self.MAX_JOBS}개 크롤링")
+
+        # 2. 각 페이지에서 메타 태그로 정보 추출
         all_jobs = []
+        for url in job_urls[:self.MAX_JOBS]:
+            job = await self._fetch_job_from_url(url)
+            if job:
+                all_jobs.append(job)
 
-        # 각 직군별로 크롤링
-        for job_type, keywords in self.JOB_TAGS.items():
-            for keyword in keywords[:2]:  # 직군당 2개 키워드만
-                jobs = await self._search_jobs_with_pagination(keyword)
-                all_jobs.extend(jobs)
-                logger.info(f"[로켓펀치] '{keyword}' 검색 결과: {len(jobs)}건")
-
-        # 중복 제거 + 필터링
-        seen_ids = set()
+        # 3. 필터링
         unique_jobs = []
         for job in all_jobs:
-            if job.source_id not in seen_ids:
-                seen_ids.add(job.source_id)
-                passed, category, score = self._filter.matches_with_category(job)
-                if passed:
-                    job.category = category
-                    job.category_score = score
-                    unique_jobs.append(job)
+            passed, category, score = self._filter.matches_with_category(job)
+            if passed:
+                job.category = category
+                job.category_score = score
+                unique_jobs.append(job)
 
         logger.info(f"[로켓펀치] 총 {len(unique_jobs)}건 수집 완료")
         return unique_jobs
 
-    async def _search_jobs_with_pagination(self, keyword: str) -> List[JobPosting]:
-        """키워드로 채용 공고 검색 (페이지네이션)"""
-        all_jobs = []
+    async def _fetch_sitemap_urls(self) -> List[str]:
+        """sitemap에서 최근 채용공고 URL 추출"""
+        try:
+            # gzip으로 압축된 sitemap 다운로드
+            response = await self.http_client.get(self.SITEMAP_URL)
+            if not response:
+                return []
 
-        for page in range(1, self.MAX_PAGES + 1):
-            jobs = await self._search_jobs(keyword, page)
-            all_jobs.extend(jobs)
+            # gzip 압축 해제
+            try:
+                xml_content = gzip.decompress(response.encode('latin-1')).decode('utf-8')
+            except:
+                xml_content = response
 
-            if len(jobs) < self.ITEMS_PER_PAGE:
-                break
+            # URL과 lastmod 추출
+            url_pattern = r'<loc>(https://www\.rocketpunch\.com/jobs/\d+)</loc>\s*<lastmod>(\d{4}-\d{2}-\d{2})</lastmod>'
+            matches = re.findall(url_pattern, xml_content)
 
-            logger.debug(f"[로켓펀치] '{keyword}' 페이지 {page}: {len(jobs)}건")
+            # lastmod 기준 정렬 (최신순)
+            sorted_urls = sorted(matches, key=lambda x: x[1], reverse=True)
 
-        return all_jobs
+            return [url for url, _ in sorted_urls]
 
-    async def _search_jobs(self, keyword: str, page: int = 1) -> List[JobPosting]:
-        """키워드로 채용 공고 검색 (HTML 크롤링)"""
-        # 로켓펀치 API가 404 반환하므로 HTML 크롤링만 사용
-        return await self._fetch_jobs_html(keyword, page)
-
-    async def _fetch_jobs_html(self, keyword: str, page: int) -> List[JobPosting]:
-        """HTML 페이지에서 채용 공고 목록 파싱"""
-        from urllib.parse import quote
-        # 로켓펀치 검색 URL (hiring_types: 1=정규직, career: 1=신입)
-        url = f"{self.BASE_URL}/jobs?keywords={quote(keyword)}&page={page}&career=1"
-
-        # 로켓펀치는 AJAX 로딩이므로 추가 헤더 필요
-        headers = {
-            "X-Requested-With": "XMLHttpRequest",
-            "Accept": "text/html, */*; q=0.01",
-        }
-
-        html = await self.fetch(url, headers=headers)
-
-        if not html:
+        except Exception as e:
+            logger.debug(f"[로켓펀치] sitemap 파싱 오류: {e}")
             return []
 
-        return self._parse_html_list(html)
+    async def _fetch_job_from_url(self, url: str) -> Optional[JobPosting]:
+        """채용공고 페이지에서 메타 태그로 정보 추출"""
+        try:
+            html = await self.fetch(url)
+            if not html:
+                return None
 
-    def _parse_api_response(self, data: Dict[str, Any]) -> List[JobPosting]:
-        """API 응답 파싱"""
-        jobs = []
-        job_list = data.get("data", {}).get("jobs", [])
+            return self._parse_job_page(html, url)
 
-        for item in job_list:
-            try:
-                job = self._parse_api_item(item)
-                if job:
-                    jobs.append(job)
-            except Exception as e:
-                logger.debug(f"[로켓펀치] API 파싱 오류: {e}")
-                continue
-
-        return jobs
-
-    def _parse_api_item(self, item: Dict[str, Any]) -> Optional[JobPosting]:
-        """API 응답 항목 파싱"""
-        job_id = str(item.get("id", ""))
-        if not job_id:
+        except Exception as e:
+            logger.debug(f"[로켓펀치] 페이지 파싱 오류: {e}")
             return None
 
-        title = item.get("title", "")
-        company = item.get("company", {})
-        company_name = company.get("name", "")
-
-        if not title or not company_name:
-            return None
-
-        # 경력 조건
-        career_type = item.get("career_type", "")
-        experience_level = self._determine_experience_level(career_type)
-        experience_text = career_type
-
-        # 기술 스택
-        tech_stacks = item.get("primary_tags", [])
-        tech_stack = [t.get("name", "") for t in tech_stacks if t.get("name")]
-
-        # 마감일
-        deadline = None
-        deadline_text = ""
-        if item.get("deadline"):
-            try:
-                deadline = datetime.fromisoformat(item["deadline"].replace("Z", "+00:00"))
-                deadline_text = deadline.strftime("%Y-%m-%d")
-            except:
-                deadline_text = item.get("deadline", "")
-
-        # 위치
-        location = item.get("location", "")
-
-        # 급여
-        salary = ""
-        if item.get("min_salary") and item.get("max_salary"):
-            salary = f"{item['min_salary']:,}~{item['max_salary']:,}만원"
-
-        return JobPosting(
-            id=self.generate_id(self.source.value, job_id),
-            title=title,
-            company_name=company_name,
-            company_logo=company.get("logo"),
-            experience_level=experience_level,
-            experience_text=experience_text,
-            deadline=deadline,
-            deadline_text=deadline_text,
-            location=location,
-            salary=salary,
-            tech_stack=tech_stack[:10],
-            source=self.source,
-            source_url=f"{self.BASE_URL}/jobs/{job_id}",
-            source_id=job_id,
-            crawled_at=datetime.now(),
-        )
-
-    def _parse_html_list(self, html: str) -> List[JobPosting]:
-        """HTML에서 채용 공고 목록 파싱"""
+    def _parse_job_page(self, html: str, url: str) -> Optional[JobPosting]:
+        """페이지에서 메타 태그로 채용 정보 추출"""
         soup = self.parse_html(html)
-        jobs = []
 
-        # 채용 공고 카드 찾기 (여러 셀렉터 시도)
-        job_cards = soup.select("div.job-item, div.company-jobs-item, div[data-job-id], .job-card, .job-list-item, a.job")
-
-        # 링크에서 직접 추출
-        if not job_cards:
-            job_cards = soup.select("a[href*='/jobs/']")
-
-        for card in job_cards:
-            try:
-                job = self._parse_html_card(card)
-                if job:
-                    jobs.append(job)
-            except Exception as e:
-                logger.debug(f"[로켓펀치] HTML 파싱 오류: {e}")
-                continue
-
-        return jobs
-
-    def _parse_html_card(self, card) -> Optional[JobPosting]:
-        """HTML 카드에서 채용 공고 파싱"""
-        # 링크에서 job ID 추출
-        job_id = card.get("data-job-id", "")
-
-        # href에서 추출 시도
-        href = card.get("href", "")
-        if not href:
-            link_elem = card.select_one("a[href*='/jobs/']")
-            if link_elem:
-                href = link_elem.get("href", "")
-
-        if href and not job_id:
-            match = re.search(r"/jobs/(\d+)", href)
-            if match:
-                job_id = match.group(1)
-
-        if not job_id:
+        # og:title에서 회사명과 포지션 추출 (형식: "회사명 - 포지션 채용")
+        og_title = soup.find("meta", property="og:title")
+        if not og_title:
             return None
 
-        # 회사명 (다양한 셀렉터 시도)
-        company_name = ""
-        for selector in [".company-name", ".name a", "h4 a", ".company a", "[class*='company']"]:
-            company_elem = card.select_one(selector)
-            if company_elem:
-                company_name = company_elem.get_text(strip=True)
-                break
+        title_content = og_title.get("content", "")
+        if " - " not in title_content:
+            return None
 
-        # 포지션명 (다양한 셀렉터 시도)
-        title = ""
-        for selector in [".job-title", ".position a", "h5 a", ".title a", "[class*='title']", "strong"]:
-            title_elem = card.select_one(selector)
-            if title_elem:
-                title = title_elem.get_text(strip=True)
-                break
-
-        # 텍스트에서 직접 추출 (위의 시도가 실패한 경우)
-        if not title or not company_name:
-            all_text = card.get_text(separator="|", strip=True)
-            parts = [p.strip() for p in all_text.split("|") if p.strip()]
-            if len(parts) >= 2 and not title:
-                title = parts[0]
-            if len(parts) >= 2 and not company_name:
-                company_name = parts[1] if len(parts) > 1 else ""
+        parts = title_content.split(" - ", 1)
+        company_name = parts[0].strip()
+        title = parts[1].replace(" 채용", "").strip() if len(parts) > 1 else ""
 
         if not title or not company_name:
             return None
 
-        # 기술 스택
-        tech_elems = card.select(".job-tag, .tag, .skill-tag, [class*='skill'], [class*='tech']")
-        tech_stack = [t.get_text(strip=True) for t in tech_elems if t.get_text(strip=True)][:10]
+        # source_id 추출
+        source_id = url.rstrip('/').split('/')[-1]
 
-        # 경력
-        career_elem = card.select_one(".career, .experience, [class*='career']")
-        experience_text = career_elem.get_text(strip=True) if career_elem else ""
-        experience_level = self._determine_experience_level(experience_text)
+        # og:description에서 추가 정보 추출
+        og_desc = soup.find("meta", property="og:description")
+        description = og_desc.get("content", "")[:500] if og_desc else ""
 
-        # 위치
-        loc_elem = card.select_one(".location, .address, [class*='location']")
-        location = loc_elem.get_text(strip=True) if loc_elem else ""
+        # og:image
+        og_image = soup.find("meta", property="og:image")
+        company_logo = og_image.get("content", "") if og_image else None
+
+        # 경력 레벨 추정 (title에서)
+        experience_level = self._determine_experience_level(title)
 
         return JobPosting(
-            id=self.generate_id(self.source.value, job_id),
+            id=self.generate_id(self.source.value, source_id),
             title=title,
             company_name=company_name,
+            company_logo=company_logo,
             experience_level=experience_level,
-            experience_text=experience_text,
-            location=location,
-            tech_stack=tech_stack,
+            description=description,
             source=self.source,
-            source_url=f"{self.BASE_URL}/jobs/{job_id}",
-            source_id=job_id,
+            source_url=url,
+            source_id=source_id,
             crawled_at=datetime.now(),
         )
 
