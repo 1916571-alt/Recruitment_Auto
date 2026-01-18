@@ -230,6 +230,8 @@ class JSONExporter(ExporterProtocol):
             "source_url": job.source_url,
             "crawled_at": job.crawled_at.isoformat() if job.crawled_at else None,
             "is_new": job.is_new,
+            "category": job.category,
+            "category_score": job.category_score,
         }
 
     def _save_json(self, data: Dict[str, Any]) -> None:
