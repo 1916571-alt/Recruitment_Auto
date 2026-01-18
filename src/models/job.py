@@ -2,9 +2,9 @@
 채용 공고 데이터 모델
 """
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Any
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class JobSource(str, Enum):
@@ -81,6 +81,22 @@ class JobPosting(BaseModel):
     # 카테고리 분류 (v2.0)
     category: Optional[str] = Field(None, description="직군 카테고리 (data, backend, frontend, pm, sales)")
     category_score: Optional[float] = Field(None, description="카테고리 분류 신뢰도 점수")
+
+    @field_validator('requirements', 'preferred', 'tech_stack', mode='before')
+    @classmethod
+    def convert_string_to_list(cls, v: Any) -> List[str]:
+        """문자열이 들어오면 리스트로 변환"""
+        if v is None:
+            return []
+        if isinstance(v, str):
+            # 줄바꿈이나 불릿으로 분리
+            if '\n' in v or '•' in v:
+                items = [item.strip() for item in v.replace('•', '\n').split('\n') if item.strip()]
+                return items[:10]
+            return [v] if v.strip() else []
+        if isinstance(v, list):
+            return [str(item) for item in v if item][:10]
+        return []
 
     class Config:
         use_enum_values = True
