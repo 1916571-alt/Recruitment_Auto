@@ -3,7 +3,7 @@
 """
 import asyncio
 import json
-from typing import Optional, Annotated
+from typing import Optional, Annotated, List
 
 import typer
 from typer import Option, Argument
@@ -14,7 +14,16 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from loguru import logger
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from src.crawlers import SaraminCrawler, InthisworkCrawler, GoogleSearchCrawler
+from src.crawlers import (
+    SaraminCrawler,
+    InthisworkCrawler,
+    GoogleSearchCrawler,
+    JobKoreaCrawler,
+    JumpitCrawler,
+    RocketPunchCrawler,
+    WantedCrawler,
+)
+from src.services.deduplication import JobDeduplicator
 from src.storage import Database
 from src.exporter import JSONExporter
 from src.exporters.static_site_builder import StaticSiteBuilder
@@ -32,8 +41,14 @@ def get_crawlers():
     환경변수 설정에 따라 크롤러를 동적으로 로드합니다.
     """
     crawlers = [
+        # 기존 크롤러
         SaraminCrawler,
         InthisworkCrawler,
+        # 신규 크롤러 (2026-01 추가)
+        JobKoreaCrawler,
+        JumpitCrawler,
+        RocketPunchCrawler,
+        WantedCrawler,
     ]
 
     # Google Search 크롤러 - 현재 비활성화
@@ -46,10 +61,14 @@ def get_crawlers():
     return crawlers
 
 
-# 크롤러 목록 (기본값, 동적 로딩은 get_crawlers() 사용)
+# 크롤러 목록 (기본값)
 CRAWLERS = [
     SaraminCrawler,
     InthisworkCrawler,
+    JobKoreaCrawler,
+    JumpitCrawler,
+    RocketPunchCrawler,
+    WantedCrawler,
 ]
 
 
@@ -105,46 +124,120 @@ def crawl():
 
 
 @app.command("crawl-to-json")
-def crawl_to_json():
-    """채용 공고 크롤링 후 JSON으로 저장 (GitHub Actions용)"""
-    console.print("[bold blue]채용 정보 수집을 시작합니다 (JSON 모드)...[/]")
+def crawl_to_json(
+    test: Annotated[bool, Option("--test", help="테스트 모드 (빠른 실행)")] = False,
+    parallel: Annotated[bool, Option("--parallel", help="병렬 크롤링 (더 빠름)")] = True,
+):
+    """채용 공고 크롤링 후 JSON으로 저장 (GitHub Actions용)
+
+    여러 소스에서 수집 후 Fuzzy Matching으로 크로스 소스 중복을 제거합니다.
+
+    --test 옵션: 인디스워크, 점핏만 1페이지씩 수집 (빠른 테스트용)
+    --parallel 옵션: 여러 크롤러를 동시에 실행 (기본 활성화)
+    """
+    if test:
+        console.print("[bold yellow]테스트 모드로 실행합니다 (제한된 수집)[/]")
+    else:
+        console.print("[bold blue]채용 정보 수집을 시작합니다 (JSON 모드)...[/]")
+
+    async def run_single_crawler(CrawlerClass, test_mode: bool) -> tuple[str, List[JobPosting]]:
+        """단일 크롤러 실행 (병렬 실행용)"""
+        crawler_name = CrawlerClass.__name__
+        jobs = []
+
+        try:
+            async with CrawlerClass() as crawler:
+                # 테스트 모드: 페이지 제한
+                if test_mode:
+                    crawler.MAX_PAGES = 1
+
+                jobs = await crawler.crawl()
+
+                # 상세 정보 가져오기 (테스트: 2개, 일반: 5개)
+                detail_count = 2 if test_mode else 5
+                for job in jobs[:detail_count]:
+                    try:
+                        await crawler.get_job_detail(job)
+                    except Exception as e:
+                        logger.debug(f"상세 정보 오류: {e}")
+
+            logger.info(f"[{crawler_name}] {len(jobs)}건 수집 완료")
+            return crawler_name, jobs
+
+        except Exception as e:
+            logger.error(f"{crawler_name} 오류: {e}")
+            return crawler_name, []
 
     async def run():
         total_jobs = []
-        crawlers = get_crawlers()
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            for CrawlerClass in crawlers:
-                crawler_name = CrawlerClass.__name__
-                task = progress.add_task(f"[cyan]{crawler_name} 수집 중...", total=None)
+        # 테스트 모드: 빠른 크롤러 2개만 (API 기반)
+        if test:
+            crawlers = [InthisworkCrawler, JumpitCrawler]
+            console.print(f"  [dim]크롤러: {len(crawlers)}개 (인디스워크, 점핏)[/]")
+        else:
+            crawlers = get_crawlers()
 
-                try:
-                    async with CrawlerClass() as crawler:
-                        jobs = await crawler.crawl()
+        console.print(f"  [dim]병렬 모드: {'ON' if parallel else 'OFF'}[/]")
+
+        if parallel:
+            # 병렬 크롤링 (asyncio.gather)
+            console.print(f"[cyan]{len(crawlers)}개 크롤러 병렬 실행 중...[/]")
+            tasks = [run_single_crawler(c, test) for c in crawlers]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for result in results:
+                if isinstance(result, Exception):
+                    logger.error(f"크롤러 오류: {result}")
+                else:
+                    crawler_name, jobs = result
+                    total_jobs.extend(jobs)
+                    console.print(f"  [green]{crawler_name}: {len(jobs)}건[/]")
+        else:
+            # 순차 크롤링 (기존 방식)
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                for CrawlerClass in crawlers:
+                    crawler_name = CrawlerClass.__name__
+                    task = progress.add_task(f"[cyan]{crawler_name} 수집 중...", total=None)
+
+                    try:
+                        crawler_name, jobs = await run_single_crawler(CrawlerClass, test)
                         total_jobs.extend(jobs)
+                        progress.update(task, description=f"[green]{crawler_name}: {len(jobs)}건 완료")
+                    except Exception as e:
+                        logger.error(f"{crawler_name} 오류: {e}")
+                        progress.update(task, description=f"[red]{crawler_name}: 오류 발생")
 
-                        # 상세 정보 가져오기 (처음 5개만 - API 제한 고려)
-                        for job in jobs[:5]:
-                            try:
-                                await crawler.get_job_detail(job)
-                            except Exception as e:
-                                logger.error(f"상세 정보 오류: {e}")
-
-                    progress.update(task, description=f"[green]{crawler_name}: {len(jobs)}건 완료")
-
-                except Exception as e:
-                    logger.error(f"{crawler_name} 오류: {e}")
-                    progress.update(task, description=f"[red]{crawler_name}: 오류 발생")
-
-        # JSON으로 저장
+        # 크로스 소스 중복 제거 (Fuzzy Matching)
         if total_jobs:
+            console.print(f"\n[cyan]크로스 소스 중복 탐지 중... (총 {len(total_jobs)}건)[/]")
+            deduplicator = JobDeduplicator()
+            unique_jobs, duplicate_groups = deduplicator.deduplicate(total_jobs, merge_info=True)
+
+            # 중복 제거 통계
+            removed_count = len(total_jobs) - len(unique_jobs)
+            if removed_count > 0:
+                console.print(f"  [yellow]중복 {removed_count}건 제거됨 ({len(duplicate_groups)}개 그룹)[/]")
+
+                # 상위 5개 중복 그룹 표시
+                for group in duplicate_groups[:5]:
+                    sources = [str(group.primary.source)]
+                    sources.extend([str(d.source) for d in group.duplicates])
+                    console.print(
+                        f"    - {group.primary.company_name} | {group.primary.title[:30]}... "
+                        f"(소스: {', '.join(set(sources))})"
+                    )
+
+            # JSON으로 저장
             exporter = JSONExporter()
-            exporter.export_jobs(total_jobs)
-            console.print(f"\n[bold green]수집 완료![/] 총 {len(total_jobs)}건")
+            exporter.export_jobs(unique_jobs)
+            console.print(f"\n[bold green]수집 완료![/] 총 {len(unique_jobs)}건 (중복 제거 후)")
+
+            return unique_jobs
 
         return total_jobs
 

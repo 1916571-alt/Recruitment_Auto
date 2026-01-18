@@ -1,10 +1,10 @@
 """
-사람인 크롤러
+잡코리아 크롤러
 """
 import re
 from typing import List, Optional
 from datetime import datetime, timedelta
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 from loguru import logger
 
@@ -13,84 +13,69 @@ from src.models import JobPosting, JobSource, ExperienceLevel
 from config.settings import settings
 
 
-class SaraminCrawler(BaseCrawler):
-    """사람인 크롤러 (v2.0 - 페이지네이션 + 직군 분류)"""
+class JobKoreaCrawler(BaseCrawler):
+    """잡코리아 크롤러"""
 
-    source = JobSource.SARAMIN
-    BASE_URL = "https://www.saramin.co.kr"
+    source = JobSource.JOBKOREA
+    BASE_URL = "https://www.jobkorea.co.kr"
 
     # 페이지네이션 설정
-    MAX_PAGES = 3  # 키워드당 최대 페이지 수
-    ITEMS_PER_PAGE = 40  # 페이지당 항목 수
+    MAX_PAGES = 3
+    ITEMS_PER_PAGE = 40
 
-    # 검색 키워드 - settings에서 가져옴
     @property
     def search_keywords(self) -> list:
         return settings.filter.job_keywords
 
     async def crawl(self) -> List[JobPosting]:
-        """채용 공고 목록 크롤링 (v2.0 - 페이지네이션 지원)"""
+        """채용 공고 목록 크롤링"""
         all_jobs = []
 
         for keyword in self.search_keywords:
             jobs = await self._search_jobs_with_pagination(keyword)
             all_jobs.extend(jobs)
-            logger.info(f"[사람인] '{keyword}' 검색 결과: {len(jobs)}건")
+            logger.info(f"[잡코리아] '{keyword}' 검색 결과: {len(jobs)}건")
 
-        # 중복 제거 + 필터링 + 분류
+        # 중복 제거 + 필터링
         seen_ids = set()
         unique_jobs = []
         for job in all_jobs:
             if job.source_id not in seen_ids:
                 seen_ids.add(job.source_id)
-                # matches_filter가 스코어 기반 필터링 수행
-                # matches_with_category를 사용하면 카테고리도 함께 할당
                 passed, category, score = self._filter.matches_with_category(job)
                 if passed:
                     job.category = category
                     job.category_score = score
                     unique_jobs.append(job)
 
-        logger.info(f"[사람인] 총 {len(unique_jobs)}건 수집 완료 (중복 제거 + 필터링)")
+        logger.info(f"[잡코리아] 총 {len(unique_jobs)}건 수집 완료")
         return unique_jobs
 
     async def _search_jobs_with_pagination(self, keyword: str) -> List[JobPosting]:
-        """키워드로 채용 공고 검색 (페이지네이션 지원)
-
-        Args:
-            keyword: 검색 키워드
-
-        Returns:
-            수집된 채용 공고 리스트
-        """
+        """키워드로 채용 공고 검색 (페이지네이션)"""
         all_jobs = []
 
         for page in range(1, self.MAX_PAGES + 1):
             jobs = await self._search_jobs(keyword, page)
             all_jobs.extend(jobs)
 
-            # 결과가 없거나 페이지당 항목 수보다 적으면 더 이상 페이지 없음
             if len(jobs) < self.ITEMS_PER_PAGE:
                 break
 
-            logger.debug(f"[사람인] '{keyword}' 페이지 {page}: {len(jobs)}건")
+            logger.debug(f"[잡코리아] '{keyword}' 페이지 {page}: {len(jobs)}건")
 
         return all_jobs
 
     async def _search_jobs(self, keyword: str, page: int = 1) -> List[JobPosting]:
         """키워드로 채용 공고 검색 (단일 페이지)"""
         params = {
-            "searchType": "search",
-            "searchword": keyword,
-            "recruitPage": page,
-            "recruitSort": "relation",
-            "recruitPageCount": self.ITEMS_PER_PAGE,
-            "inner_com_type": "",  # 기업 형태
-            "edu_lv": "",  # 학력
-            "career": "1,8",  # 1: 신입, 8: 경력무관
+            "stext": keyword,
+            "careerType": "1,8",  # 1: 신입, 8: 경력무관
+            "tabType": "recruit",
+            "Page_No": page,
         }
 
-        url = f"{self.BASE_URL}/zf_user/search/recruit?{urlencode(params)}"
+        url = f"{self.BASE_URL}/Search/?{urlencode(params, quote_via=quote)}"
         html = await self.fetch(url)
 
         if not html:
@@ -103,30 +88,34 @@ class SaraminCrawler(BaseCrawler):
         soup = self.parse_html(html)
         jobs = []
 
-        # 채용 공고 카드 찾기
-        job_cards = soup.select(".item_recruit")
+        # 채용 공고 항목 찾기
+        job_items = soup.select(".list-default .list-post")
+        if not job_items:
+            job_items = soup.select(".recruit-info")
+        if not job_items:
+            job_items = soup.select(".list-item")
 
-        for card in job_cards:
+        for item in job_items:
             try:
-                job = self._parse_job_card(card)
+                job = self._parse_job_item(item)
                 if job:
                     jobs.append(job)
             except Exception as e:
-                logger.error(f"[사람인] 파싱 오류: {e}")
+                logger.debug(f"[잡코리아] 파싱 오류: {e}")
                 continue
 
         return jobs
 
-    def _parse_job_card(self, card) -> Optional[JobPosting]:
-        """채용 공고 카드 파싱"""
+    def _parse_job_item(self, item) -> Optional[JobPosting]:
+        """채용 공고 항목 파싱"""
         # 회사명
-        company_elem = card.select_one(".corp_name a")
+        company_elem = item.select_one(".corp-name a, .name a, .company-name")
         if not company_elem:
             return None
         company_name = company_elem.get_text(strip=True)
 
         # 포지션명
-        title_elem = card.select_one(".job_tit a")
+        title_elem = item.select_one(".information-title a, .title a, .job-title")
         if not title_elem:
             return None
         title = title_elem.get_text(strip=True)
@@ -141,41 +130,30 @@ class SaraminCrawler(BaseCrawler):
 
         # 경력 조건
         experience_text = ""
-        condition_elems = card.select(".job_condition span")
-        for elem in condition_elems:
-            text = elem.get_text(strip=True)
-            if any(exp in text for exp in ["신입", "경력", "무관"]):
-                experience_text = text
-                break
+        exp_elem = item.select_one(".option .exp, .exp-text, .career")
+        if exp_elem:
+            experience_text = exp_elem.get_text(strip=True)
 
-        # 경력 레벨 결정
         experience_level = self._determine_experience_level(experience_text)
 
         # 마감일
         deadline_text = ""
-        deadline_elem = card.select_one(".job_date .date")
-        if deadline_elem:
-            deadline_text = deadline_elem.get_text(strip=True)
+        date_elem = item.select_one(".date, .deadline, .end-date")
+        if date_elem:
+            deadline_text = date_elem.get_text(strip=True)
 
         deadline = self._parse_deadline(deadline_text)
 
         # 위치
         location = ""
-        for elem in condition_elems:
-            text = elem.get_text(strip=True)
-            if any(loc in text for loc in ["서울", "경기", "부산", "대전", "대구", "인천", "광주"]):
-                location = text
-                break
-
-        # 회사 로고
-        logo_elem = card.select_one(".corp_logo img")
-        company_logo = logo_elem.get("src") if logo_elem else None
+        loc_elem = item.select_one(".loc, .location, .work-place")
+        if loc_elem:
+            location = loc_elem.get_text(strip=True)
 
         return JobPosting(
             id=self.generate_id(self.source.value, source_id),
             title=title,
             company_name=company_name,
-            company_logo=company_logo,
             experience_level=experience_level,
             experience_text=experience_text,
             deadline=deadline,
@@ -189,13 +167,20 @@ class SaraminCrawler(BaseCrawler):
 
     def _extract_source_id(self, url: str) -> str:
         """URL에서 공고 ID 추출"""
-        match = re.search(r"rec_idx=(\d+)", url)
+        # /Recruit/GI_Read/xxxxx 형식
+        match = re.search(r"GI_Read/(\d+)", url)
         if match:
             return match.group(1)
-        return url.split("/")[-1]
+        # oZwork/xxxxx 형식
+        match = re.search(r"oZwork/(\d+)", url)
+        if match:
+            return match.group(1)
+        return url.rstrip('/').split('/')[-1][:20]
 
     def _determine_experience_level(self, text: str) -> ExperienceLevel:
         """경력 레벨 결정"""
+        if not text:
+            return ExperienceLevel.ANY
         text = text.lower()
         if "인턴" in text:
             return ExperienceLevel.INTERN
@@ -203,7 +188,9 @@ class SaraminCrawler(BaseCrawler):
             return ExperienceLevel.ANY
         if "신입" in text:
             return ExperienceLevel.ENTRY
-        return ExperienceLevel.EXPERIENCED
+        if any(x in text for x in ["경력", "시니어", "senior"]):
+            return ExperienceLevel.EXPERIENCED
+        return ExperienceLevel.ANY
 
     def _parse_deadline(self, text: str) -> Optional[datetime]:
         """마감일 파싱"""
@@ -213,23 +200,19 @@ class SaraminCrawler(BaseCrawler):
         today = datetime.now()
 
         # D-7 형식
-        match = re.search(r"D-(\d+)", text)
+        match = re.search(r"D-(\d+)", text, re.IGNORECASE)
         if match:
             days = int(match.group(1))
             return today + timedelta(days=days)
 
-        # ~MM/DD 형식
-        match = re.search(r"~\s*(\d{1,2})/(\d{1,2})", text)
+        # YYYY.MM.DD 형식
+        match = re.search(r"(\d{4})\.(\d{1,2})\.(\d{1,2})", text)
         if match:
-            month, day = int(match.group(1)), int(match.group(2))
-            year = today.year
-            deadline = datetime(year, month, day)
-            if deadline < today:
-                deadline = datetime(year + 1, month, day)
-            return deadline
+            year, month, day = int(match.group(1)), int(match.group(2)), int(match.group(3))
+            return datetime(year, month, day)
 
-        # ~MM.DD 형식
-        match = re.search(r"~\s*(\d{1,2})\.(\d{1,2})", text)
+        # MM/DD 또는 MM.DD 형식
+        match = re.search(r"(\d{1,2})[/.](\d{1,2})", text)
         if match:
             month, day = int(match.group(1)), int(match.group(2))
             year = today.year
@@ -242,6 +225,9 @@ class SaraminCrawler(BaseCrawler):
 
     async def get_job_detail(self, job: JobPosting) -> JobPosting:
         """채용 공고 상세 정보 가져오기"""
+        if not job.source_url:
+            return job
+
         html = await self.fetch(job.source_url)
         if not html:
             return job
@@ -249,28 +235,22 @@ class SaraminCrawler(BaseCrawler):
         soup = self.parse_html(html)
 
         # 상세 설명
-        desc_elem = soup.select_one(".jv_cont.jv_summary")
+        desc_elem = soup.select_one(".view-detail-content, .recruit-view-detail, .job-detail")
         if desc_elem:
             job.description = desc_elem.get_text(strip=True)[:500]
 
         # 자격 요건
         requirements = []
-        req_section = soup.select_one(".jv_cont.jv_requirement")
-        if req_section:
-            for li in req_section.select("li"):
-                requirements.append(li.get_text(strip=True))
-        job.requirements = requirements[:10]
+        req_section = soup.select(".requirement-list li, .spec-list li")
+        for li in req_section[:10]:
+            requirements.append(li.get_text(strip=True))
+        if requirements:
+            job.requirements = requirements
 
         # 기술 스택
-        tech_elem = soup.select(".skill_list span")
-        job.tech_stack = [t.get_text(strip=True) for t in tech_elem][:10]
-
-        # 실습 기간 (인턴의 경우)
-        period_section = soup.find(string=re.compile(r"(수습|실습)\s*기간"))
-        if period_section:
-            parent = period_section.find_parent()
-            if parent:
-                job.internship_period = parent.get_text(strip=True)
+        tech_elems = soup.select(".skill-tag, .tech-stack span")
+        if tech_elems:
+            job.tech_stack = [t.get_text(strip=True) for t in tech_elems][:10]
 
         job.updated_at = datetime.now()
         return job

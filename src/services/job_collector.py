@@ -10,6 +10,7 @@ from loguru import logger
 from src.core.config import CrawlerConfig, get_config
 from src.core.interfaces import CrawlerProtocol, FilterProtocol
 from src.models import JobPosting
+from src.services.deduplication import JobDeduplicator
 
 
 class JobCollector:
@@ -17,6 +18,7 @@ class JobCollector:
 
     여러 크롤러를 실행하고 결과를 통합하는 역할을 담당합니다.
     의존성 주입을 통해 크롤러와 필터를 받습니다.
+    Fuzzy Matching 기반 중복 탐지를 지원합니다.
     """
 
     def __init__(
@@ -24,16 +26,19 @@ class JobCollector:
         crawlers: List[CrawlerProtocol],
         job_filter: Optional[FilterProtocol] = None,
         config: Optional[CrawlerConfig] = None,
+        deduplicator: Optional[JobDeduplicator] = None,
     ):
         """
         Args:
             crawlers: 실행할 크롤러 리스트
             job_filter: 필터링에 사용할 필터 (없으면 필터링 안 함)
             config: 크롤러 설정
+            deduplicator: 중복 탐지기 (없으면 기본 중복 탐지 사용)
         """
         self._crawlers = crawlers
         self._filter = job_filter
         self._config = config or get_config().crawler
+        self._deduplicator = deduplicator or JobDeduplicator()
 
     async def collect(self, fetch_details: bool = False) -> List[JobPosting]:
         """모든 크롤러에서 채용 공고 수집
@@ -121,7 +126,10 @@ class JobCollector:
         return None
 
     def _deduplicate(self, jobs: List[JobPosting]) -> List[JobPosting]:
-        """중복 제거
+        """Fuzzy Matching 기반 중복 제거
+
+        동일 소스 내 중복은 source_id로 빠르게 제거하고,
+        크로스 소스 중복은 Fuzzy Matching으로 탐지합니다.
 
         Args:
             jobs: 중복이 있을 수 있는 공고 리스트
@@ -129,16 +137,33 @@ class JobCollector:
         Returns:
             중복이 제거된 공고 리스트
         """
-        seen_ids = set()
-        unique = []
-
+        # 1단계: 같은 소스 내 중복 빠르게 제거
+        seen_keys = set()
+        stage1_unique = []
         for job in jobs:
-            key = job.source_id or job.id
-            if key not in seen_ids:
-                seen_ids.add(key)
-                unique.append(job)
+            key = f"{job.source}_{job.source_id or job.id}"
+            if key not in seen_keys:
+                seen_keys.add(key)
+                stage1_unique.append(job)
 
-        if len(jobs) != len(unique):
-            logger.debug(f"중복 제거: {len(jobs)}건 → {len(unique)}건")
+        if len(jobs) != len(stage1_unique):
+            logger.debug(f"1단계 중복 제거 (같은 소스): {len(jobs)}건 → {len(stage1_unique)}건")
 
-        return unique
+        # 2단계: 크로스 소스 중복 Fuzzy Matching으로 탐지
+        unique_jobs, duplicate_groups = self._deduplicator.deduplicate(
+            stage1_unique,
+            merge_info=True,  # 정보 병합 활성화
+        )
+
+        # 중복 그룹 로깅
+        if duplicate_groups:
+            for group in duplicate_groups[:5]:  # 최대 5개만 로깅
+                sources = [group.primary.source]
+                sources.extend([d.source for d in group.duplicates])
+                source_str = ", ".join(str(s) for s in set(sources))
+                logger.debug(
+                    f"중복 발견: '{group.primary.company_name}' - '{group.primary.title[:30]}...' "
+                    f"(소스: {source_str}, 중복 {len(group.duplicates)}건)"
+                )
+
+        return unique_jobs

@@ -12,6 +12,10 @@ class JobSource(str, Enum):
     SARAMIN = "saramin"
     INTHISWORK = "inthiswork"  # 인디스워크 (데이터 분석 전문)
     GOOGLE_SEARCH = "google_search"  # Google Custom Search API
+    JOBKOREA = "jobkorea"  # 잡코리아
+    JUMPIT = "jumpit"  # 점핏 (개발자 특화)
+    ROCKETPUNCH = "rocketpunch"  # 로켓펀치 (스타트업)
+    WANTED = "wanted"  # 원티드 (IT/스타트업)
 
 
 class ExperienceLevel(str, Enum):
@@ -21,6 +25,16 @@ class ExperienceLevel(str, Enum):
     ANY = "경력무관"
     JUNIOR = "주니어"
     EXPERIENCED = "경력"
+
+
+class JobCategory(str, Enum):
+    """직군 카테고리"""
+    DATA = "data"
+    BACKEND = "backend"
+    FRONTEND = "frontend"
+    PM = "pm"
+    SALES = "sales"
+    PROCUREMENT = "procurement"  # 구매/CRM
 
 
 class JobPosting(BaseModel):
@@ -64,6 +78,10 @@ class JobPosting(BaseModel):
     is_active: bool = Field(True, description="활성 상태")
     is_new: bool = Field(True, description="새 공고 여부")
 
+    # 카테고리 분류 (v2.0)
+    category: Optional[str] = Field(None, description="직군 카테고리 (data, backend, frontend, pm, sales)")
+    category_score: Optional[float] = Field(None, description="카테고리 분류 신뢰도 점수")
+
     class Config:
         use_enum_values = True
 
@@ -82,3 +100,4 @@ class JobSummary(BaseModel):
     crawled_at: datetime
     is_new: bool = True
     days_until_deadline: Optional[int] = None
+    category: Optional[str] = None  # v2.0: 직군 카테고리

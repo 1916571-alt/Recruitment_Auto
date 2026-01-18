@@ -8,6 +8,10 @@ from .http_client import AioHttpClient
 from .saramin import SaraminCrawler
 from .inthiswork import InthisworkCrawler
 from .google_search import GoogleSearchCrawler
+from .jobkorea import JobKoreaCrawler
+from .jumpit import JumpitCrawler
+from .rocketpunch import RocketPunchCrawler
+from .wanted import WantedCrawler
 
 __all__ = [
     "BaseCrawler",
@@ -15,4 +19,8 @@ __all__ = [
     "SaraminCrawler",
     "InthisworkCrawler",
     "GoogleSearchCrawler",
+    "JobKoreaCrawler",
+    "JumpitCrawler",
+    "RocketPunchCrawler",
+    "WantedCrawler",
 ]

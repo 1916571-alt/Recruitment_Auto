@@ -6,7 +6,7 @@
 """
 from abc import abstractmethod
 from pathlib import Path
-from typing import List, Optional, Protocol, runtime_checkable
+from typing import List, Optional, Protocol, Tuple, runtime_checkable
 
 from src.models import JobPosting
 
@@ -58,6 +58,17 @@ class FilterProtocol(Protocol):
 
         Returns:
             필터 조건 충족 여부
+        """
+        ...
+
+    def matches_with_category(self, job: JobPosting) -> Tuple[bool, Optional[str], float]:
+        """채용 공고 필터링 + 카테고리 분류 동시 수행 (v2.0)
+
+        Args:
+            job: 확인할 채용 공고
+
+        Returns:
+            (통과 여부, 카테고리, 점수)
         """
         ...
 

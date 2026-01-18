@@ -44,35 +44,49 @@ GOOGLE_SEARCH_QUERIES: Dict[str, List[str]] = {
     # 영업 직군
     "sales": [
         "영업 신입 채용",
-        "영업관리 주니어 채용",
         "세일즈 신입 채용",
         "B2B 영업 경력무관",
+        "IT 영업 주니어 채용",
+    ],
+    # 구매/CRM 직군
+    "procurement": [
+        "구매 담당 신입 채용",
+        "바이어 주니어 채용",
+        "CRM 담당 신입 채용",
+        "조달 경력무관 채용",
     ],
 }
 
 # 활성화할 직군 목록 (빈 리스트면 전체 활성화)
-ACTIVE_JOB_TYPES: List[str] = ["data", "frontend", "backend", "pm", "sales"]
+ACTIVE_JOB_TYPES: List[str] = ["data", "frontend", "backend", "pm", "sales", "procurement"]
 
 
 class FilterSettings(BaseModel):
     """필터링 설정"""
-    # 직무 키워드 (OR 조건) - 모든 직군 포함
+    # 직무 키워드 (OR 조건) - 핵심 키워드로 최적화 (사람인 검색용)
+    # 40개 → 15개로 통합 (유사 키워드는 검색 결과에서 자동 포함)
     job_keywords: List[str] = [
-        # 데이터 분석
-        "데이터 분석", "데이터분석", "Data Analyst", "Data Analysis",
-        "데이터 사이언티스트", "Data Scientist", "BI 분석", "비즈니스 분석",
-        "데이터 엔지니어", "Data Engineer", "머신러닝", "ML Engineer",
-        # 백엔드 개발
-        "백엔드", "Backend", "서버 개발", "Server Developer",
-        "Java 개발", "Spring", "Python 개발", "Node.js",
-        # 프론트엔드 개발
-        "프론트엔드", "Frontend", "React", "Vue", "웹 개발", "퍼블리셔",
-        # PM/기획
-        "서비스 기획", "PM", "프로덕트 매니저", "Product Manager",
-        "IT 기획", "프로덕트 오너", "PO",
-        # 영업
-        "영업", "영업관리", "세일즈", "Sales", "Account Manager",
-        "B2B 영업", "B2C 영업", "솔루션 영업", "IT 영업", "기술영업",
+        # 데이터 (3개)
+        "데이터 분석가 신입",
+        "데이터 엔지니어 신입",
+        "머신러닝 엔지니어",
+        # 백엔드 (3개)
+        "백엔드 개발자 신입",
+        "서버 개발자 신입",
+        "Java 개발자 신입",
+        # 프론트엔드 (3개)
+        "프론트엔드 개발자 신입",
+        "웹 개발자 신입",
+        "React 개발자",
+        # PM/기획 (2개)
+        "서비스 기획자 신입",
+        "PM 주니어",
+        # 영업 (2개)
+        "IT 영업 신입",
+        "B2B 영업 신입",
+        # 구매/CRM (2개)
+        "구매 담당 신입",
+        "CRM 담당",
     ]
 
     # 제외 키워드 (타이틀에 이 키워드가 포함되면 제외)
