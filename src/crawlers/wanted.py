@@ -24,32 +24,21 @@ class WantedCrawler(BaseCrawler):
     MAX_PAGES = 3
     ITEMS_PER_PAGE = 20
 
-    # 직군별 태그 ID
-    TAG_IDS = {
-        "backend": [872, 669],       # 서버 개발자, 백엔드 개발자
-        "frontend": [669, 873],      # 프론트엔드 개발자
-        "data": [655, 1024, 1025],   # 데이터 분석가, 데이터 엔지니어, ML 엔지니어
-        "pm": [876, 877],            # 서비스 기획자, PM
-    }
-
-    # 직군 검색 키워드
-    SEARCH_KEYWORDS = [
-        "백엔드 신입",
-        "프론트엔드 신입",
-        "데이터 분석 신입",
-        "서비스 기획 신입",
-        "서버 개발자",
-    ]
+    # 페이지 수 (1페이지당 20개)
+    PAGES_TO_FETCH = 3
 
     async def crawl(self) -> List[JobPosting]:
         """채용 공고 목록 크롤링"""
         all_jobs = []
 
-        # 키워드별로 검색
-        for keyword in self.SEARCH_KEYWORDS:
-            jobs = await self._search_jobs_with_pagination(keyword)
+        # 신입 공고만 가져오기 (years=0)
+        for page in range(1, self.PAGES_TO_FETCH + 1):
+            jobs, has_more = await self._fetch_jobs_page(page)
             all_jobs.extend(jobs)
-            logger.info(f"[원티드] '{keyword}' 검색 결과: {len(jobs)}건")
+            logger.debug(f"[원티드] 페이지 {page}: {len(jobs)}건")
+
+            if not has_more or len(jobs) < self.ITEMS_PER_PAGE:
+                break
 
         # 중복 제거 + 필터링
         seen_ids = set()
@@ -66,42 +55,21 @@ class WantedCrawler(BaseCrawler):
         logger.info(f"[원티드] 총 {len(unique_jobs)}건 수집 완료")
         return unique_jobs
 
-    async def _search_jobs_with_pagination(self, keyword: str) -> List[JobPosting]:
-        """키워드로 채용 공고 검색 (페이지네이션)"""
-        all_jobs = []
-        offset = 0
+    async def _fetch_jobs_page(self, page: int = 1) -> tuple[List[JobPosting], bool]:
+        """API로 신입 공고 조회 (tag_type_ids 없이)"""
+        offset = (page - 1) * self.ITEMS_PER_PAGE
 
-        for page in range(1, self.MAX_PAGES + 1):
-            jobs, has_more = await self._search_jobs(keyword, offset)
-            all_jobs.extend(jobs)
-
-            if not has_more or len(jobs) < self.ITEMS_PER_PAGE:
-                break
-
-            offset += self.ITEMS_PER_PAGE
-            logger.debug(f"[원티드] '{keyword}' 페이지 {page}: {len(jobs)}건")
-
-        return all_jobs
-
-    async def _search_jobs(
-        self,
-        keyword: str,
-        offset: int = 0
-    ) -> tuple[List[JobPosting], bool]:
-        """API로 채용 공고 검색"""
-        url = f"{self.API_URL}/jobs"
-        params = {
-            "query": keyword,
-            "limit": self.ITEMS_PER_PAGE,
-            "offset": offset,
-            "years": "0",  # 신입
-            "country": "kr",
-            "locations": "all",
-            "job_sort": "-confirm_time",  # 최신순
-        }
+        # 심플한 API 호출 (years=0만 사용, job_sort 제거)
+        url = (
+            f"{self.API_URL}/jobs"
+            f"?country=kr"
+            f"&years=0"
+            f"&limit={self.ITEMS_PER_PAGE}"
+            f"&offset={offset}"
+        )
 
         try:
-            data = await self.fetch_json(url, params=params)
+            data = await self.fetch_json(url)
             if data and "data" in data:
                 jobs = self._parse_api_response(data)
                 has_more = len(data.get("data", [])) >= self.ITEMS_PER_PAGE
@@ -109,20 +77,7 @@ class WantedCrawler(BaseCrawler):
         except Exception as e:
             logger.debug(f"[원티드] API 오류: {e}")
 
-        # HTML 크롤링으로 대체
-        jobs = await self._fetch_jobs_html(keyword, offset)
-        return jobs, len(jobs) >= self.ITEMS_PER_PAGE
-
-    async def _fetch_jobs_html(self, keyword: str, offset: int) -> List[JobPosting]:
-        """HTML 페이지에서 채용 공고 목록 파싱"""
-        page = (offset // self.ITEMS_PER_PAGE) + 1
-        url = f"{self.BASE_URL}/search?query={keyword}&tab=position"
-        html = await self.fetch(url)
-
-        if not html:
-            return []
-
-        return self._parse_html_list(html)
+        return [], False
 
     def _parse_api_response(self, data: Dict[str, Any]) -> List[JobPosting]:
         """API 응답 파싱"""

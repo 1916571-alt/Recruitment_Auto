@@ -68,6 +68,7 @@ class JobKoreaCrawler(BaseCrawler):
 
     async def _search_jobs(self, keyword: str, page: int = 1) -> List[JobPosting]:
         """키워드로 채용 공고 검색 (단일 페이지)"""
+        # 잡코리아 검색 URL 형식
         params = {
             "stext": keyword,
             "careerType": "1,8",  # 1: 신입, 8: 경력무관
@@ -76,7 +77,15 @@ class JobKoreaCrawler(BaseCrawler):
         }
 
         url = f"{self.BASE_URL}/Search/?{urlencode(params, quote_via=quote)}"
-        html = await self.fetch(url)
+
+        # 추가 헤더 (브라우저처럼 보이기 위해)
+        headers = {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": self.BASE_URL,
+        }
+
+        html = await self.fetch(url, headers=headers)
 
         if not html:
             return []
@@ -88,12 +97,20 @@ class JobKoreaCrawler(BaseCrawler):
         soup = self.parse_html(html)
         jobs = []
 
-        # 채용 공고 항목 찾기
+        # 채용 공고 항목 찾기 (다양한 셀렉터 시도)
         job_items = soup.select(".list-default .list-post")
         if not job_items:
             job_items = soup.select(".recruit-info")
         if not job_items:
             job_items = soup.select(".list-item")
+        if not job_items:
+            job_items = soup.select("article.list")
+        if not job_items:
+            job_items = soup.select("[class*='list'] li, [class*='job-list'] > div")
+
+        # 링크에서 직접 추출
+        if not job_items:
+            job_items = soup.select("a[href*='/Recruit/'], a[href*='/oZwork/']")
 
         for item in job_items:
             try:
@@ -108,52 +125,72 @@ class JobKoreaCrawler(BaseCrawler):
 
     def _parse_job_item(self, item) -> Optional[JobPosting]:
         """채용 공고 항목 파싱"""
-        # 회사명
-        company_elem = item.select_one(".corp-name a, .name a, .company-name")
-        if not company_elem:
-            return None
-        company_name = company_elem.get_text(strip=True)
+        # 회사명 (다양한 셀렉터 시도)
+        company_name = ""
+        for selector in [".corp-name a", ".name a", ".company-name", "[class*='corp'] a", "[class*='company']"]:
+            company_elem = item.select_one(selector)
+            if company_elem:
+                company_name = company_elem.get_text(strip=True)
+                break
 
-        # 포지션명
-        title_elem = item.select_one(".information-title a, .title a, .job-title")
-        if not title_elem:
+        # 포지션명 (다양한 셀렉터 시도)
+        title = ""
+        title_elem = None
+        for selector in [".information-title a", ".title a", ".job-title", "[class*='title'] a", "a[href*='/Recruit/']"]:
+            title_elem = item.select_one(selector)
+            if title_elem:
+                title = title_elem.get_text(strip=True)
+                break
+
+        if not title or not title_elem:
             return None
-        title = title_elem.get_text(strip=True)
 
         # 링크
         link = title_elem.get("href", "")
+        if not link:
+            link_elem = item.select_one("a[href*='/Recruit/'], a[href*='/oZwork/']")
+            if link_elem:
+                link = link_elem.get("href", "")
         if link.startswith("/"):
             link = f"{self.BASE_URL}{link}"
 
         # 공고 ID 추출
         source_id = self._extract_source_id(link)
+        if not source_id:
+            return None
 
         # 경력 조건
         experience_text = ""
-        exp_elem = item.select_one(".option .exp, .exp-text, .career")
-        if exp_elem:
-            experience_text = exp_elem.get_text(strip=True)
+        for selector in [".option .exp", ".exp-text", ".career", "[class*='exp']", "[class*='career']"]:
+            exp_elem = item.select_one(selector)
+            if exp_elem:
+                experience_text = exp_elem.get_text(strip=True)
+                break
 
         experience_level = self._determine_experience_level(experience_text)
 
         # 마감일
         deadline_text = ""
-        date_elem = item.select_one(".date, .deadline, .end-date")
-        if date_elem:
-            deadline_text = date_elem.get_text(strip=True)
+        for selector in [".date", ".deadline", ".end-date", "[class*='date']"]:
+            date_elem = item.select_one(selector)
+            if date_elem:
+                deadline_text = date_elem.get_text(strip=True)
+                break
 
         deadline = self._parse_deadline(deadline_text)
 
         # 위치
         location = ""
-        loc_elem = item.select_one(".loc, .location, .work-place")
-        if loc_elem:
-            location = loc_elem.get_text(strip=True)
+        for selector in [".loc", ".location", ".work-place", "[class*='loc']"]:
+            loc_elem = item.select_one(selector)
+            if loc_elem:
+                location = loc_elem.get_text(strip=True)
+                break
 
         return JobPosting(
             id=self.generate_id(self.source.value, source_id),
             title=title,
-            company_name=company_name,
+            company_name=company_name if company_name else "미상",
             experience_level=experience_level,
             experience_text=experience_text,
             deadline=deadline,

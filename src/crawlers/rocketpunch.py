@@ -74,29 +74,23 @@ class RocketPunchCrawler(BaseCrawler):
         return all_jobs
 
     async def _search_jobs(self, keyword: str, page: int = 1) -> List[JobPosting]:
-        """키워드로 채용 공고 검색"""
-        # API 먼저 시도
-        api_url = f"{self.API_URL}/jobs/template"
-        params = {
-            "keywords": keyword,
-            "page": page,
-            "hiring_type": "0",  # 0: 신입, 1: 경력
-        }
-
-        try:
-            data = await self.fetch_json(api_url, params=params)
-            if data and "data" in data:
-                return self._parse_api_response(data)
-        except Exception as e:
-            logger.debug(f"[로켓펀치] API 오류: {e}")
-
-        # HTML 크롤링 시도
+        """키워드로 채용 공고 검색 (HTML 크롤링)"""
+        # 로켓펀치 API가 404 반환하므로 HTML 크롤링만 사용
         return await self._fetch_jobs_html(keyword, page)
 
     async def _fetch_jobs_html(self, keyword: str, page: int) -> List[JobPosting]:
         """HTML 페이지에서 채용 공고 목록 파싱"""
-        url = f"{self.BASE_URL}/jobs?keywords={keyword}&page={page}&hiring_type=0"
-        html = await self.fetch(url)
+        from urllib.parse import quote
+        # 로켓펀치 검색 URL (hiring_types: 1=정규직, career: 1=신입)
+        url = f"{self.BASE_URL}/jobs?keywords={quote(keyword)}&page={page}&career=1"
+
+        # 로켓펀치는 AJAX 로딩이므로 추가 헤더 필요
+        headers = {
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "text/html, */*; q=0.01",
+        }
+
+        html = await self.fetch(url, headers=headers)
 
         if not html:
             return []
@@ -182,8 +176,12 @@ class RocketPunchCrawler(BaseCrawler):
         soup = self.parse_html(html)
         jobs = []
 
-        # 채용 공고 카드 찾기
-        job_cards = soup.select(".job-item, .company-jobs-item, div[data-job-id]")
+        # 채용 공고 카드 찾기 (여러 셀렉터 시도)
+        job_cards = soup.select("div.job-item, div.company-jobs-item, div[data-job-id], .job-card, .job-list-item, a.job")
+
+        # 링크에서 직접 추출
+        if not job_cards:
+            job_cards = soup.select("a[href*='/jobs/']")
 
         for card in job_cards:
             try:
@@ -198,41 +196,63 @@ class RocketPunchCrawler(BaseCrawler):
 
     def _parse_html_card(self, card) -> Optional[JobPosting]:
         """HTML 카드에서 채용 공고 파싱"""
-        # 공고 ID
+        # 링크에서 job ID 추출
         job_id = card.get("data-job-id", "")
-        if not job_id:
+
+        # href에서 추출 시도
+        href = card.get("href", "")
+        if not href:
             link_elem = card.select_one("a[href*='/jobs/']")
             if link_elem:
                 href = link_elem.get("href", "")
-                match = re.search(r"/jobs/(\d+)", href)
-                if match:
-                    job_id = match.group(1)
+
+        if href and not job_id:
+            match = re.search(r"/jobs/(\d+)", href)
+            if match:
+                job_id = match.group(1)
 
         if not job_id:
             return None
 
-        # 회사명
-        company_elem = card.select_one(".company-name, .name a, h4 a")
-        company_name = company_elem.get_text(strip=True) if company_elem else ""
+        # 회사명 (다양한 셀렉터 시도)
+        company_name = ""
+        for selector in [".company-name", ".name a", "h4 a", ".company a", "[class*='company']"]:
+            company_elem = card.select_one(selector)
+            if company_elem:
+                company_name = company_elem.get_text(strip=True)
+                break
 
-        # 포지션명
-        title_elem = card.select_one(".job-title, .position a, h5 a")
-        title = title_elem.get_text(strip=True) if title_elem else ""
+        # 포지션명 (다양한 셀렉터 시도)
+        title = ""
+        for selector in [".job-title", ".position a", "h5 a", ".title a", "[class*='title']", "strong"]:
+            title_elem = card.select_one(selector)
+            if title_elem:
+                title = title_elem.get_text(strip=True)
+                break
+
+        # 텍스트에서 직접 추출 (위의 시도가 실패한 경우)
+        if not title or not company_name:
+            all_text = card.get_text(separator="|", strip=True)
+            parts = [p.strip() for p in all_text.split("|") if p.strip()]
+            if len(parts) >= 2 and not title:
+                title = parts[0]
+            if len(parts) >= 2 and not company_name:
+                company_name = parts[1] if len(parts) > 1 else ""
 
         if not title or not company_name:
             return None
 
         # 기술 스택
-        tech_elems = card.select(".job-tag, .tag, .skill-tag")
-        tech_stack = [t.get_text(strip=True) for t in tech_elems][:10]
+        tech_elems = card.select(".job-tag, .tag, .skill-tag, [class*='skill'], [class*='tech']")
+        tech_stack = [t.get_text(strip=True) for t in tech_elems if t.get_text(strip=True)][:10]
 
         # 경력
-        career_elem = card.select_one(".career, .experience")
+        career_elem = card.select_one(".career, .experience, [class*='career']")
         experience_text = career_elem.get_text(strip=True) if career_elem else ""
         experience_level = self._determine_experience_level(experience_text)
 
         # 위치
-        loc_elem = card.select_one(".location, .address")
+        loc_elem = card.select_one(".location, .address, [class*='location']")
         location = loc_elem.get_text(strip=True) if loc_elem else ""
 
         return JobPosting(

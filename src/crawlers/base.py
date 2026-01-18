@@ -75,16 +75,17 @@ class BaseCrawler(ABC):
             raise RuntimeError("HTTP client not initialized. Use async with statement.")
         return self._http_client
 
-    async def fetch(self, url: str) -> Optional[str]:
+    async def fetch(self, url: str, **kwargs) -> Optional[str]:
         """URL에서 HTML 가져오기
 
         Args:
             url: 요청 URL
+            **kwargs: 추가 옵션 (headers 등)
 
         Returns:
             HTML 문자열 또는 None
         """
-        return await self.http_client.get(url)
+        return await self.http_client.get(url, **kwargs)
 
     async def fetch_json(self, url: str, **kwargs) -> Optional[dict]:
         """URL에서 JSON 가져오기
