@@ -6,14 +6,12 @@
 """
 from .job_filter import JobFilter
 from .job_collector import JobCollector
-from .job_classifier import JobClassifier
 from .gap_analysis_service import GapAnalyzer, GroqLLM, format_gap_analysis_comment
 from .deduplication import JobDeduplicator, DuplicateGroup
 
 __all__ = [
     "JobFilter",
     "JobCollector",
-    "JobClassifier",
     "GapAnalyzer",
     "GroqLLM",
     "format_gap_analysis_comment",
