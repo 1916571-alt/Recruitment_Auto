@@ -14,7 +14,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from loguru import logger
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from src.crawlers import SaraminCrawler, InthisworkCrawler, GoogleSearchCrawler
+from src.crawlers import SaraminCrawler, InthisworkCrawler
 from src.storage import Database
 from src.exporter import JSONExporter, StaticSiteBuilder
 from src.core.config import get_config
@@ -36,12 +36,12 @@ def get_crawlers():
         InthisworkCrawler,
     ]
 
-    # Google Search는 API 키가 있을 때만 활성화
-    if config.google_api_key and config.google_cse_id:
-        crawlers.append(GoogleSearchCrawler)
-        logger.info("GoogleSearchCrawler 활성화됨")
-    else:
-        logger.debug("GoogleSearchCrawler 비활성화 (API 키 또는 CSE ID 없음)")
+    # Google Search Removed in this version
+    # if config.google_api_key and config.google_cse_id:
+    #     crawlers.append(GoogleSearchCrawler)
+    #     logger.info("GoogleSearchCrawler 활성화됨")
+    # else:
+    #     logger.debug("GoogleSearchCrawler 비활성화 (API 키 또는 CSE ID 없음)")
 
     return crawlers
 
