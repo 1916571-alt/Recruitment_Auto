@@ -33,10 +33,6 @@ typer[all]==0.9.0
 click>=8.0.0,<8.2.0
 rich==13.7.0
 
-# Embedding
-sentence-transformers==2.2.2
-numpy>=1.24.0
-
 # Testing
 pytest==8.0.0
 pytest-asyncio==0.23.3
